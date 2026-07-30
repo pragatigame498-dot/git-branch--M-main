@@ -48,6 +48,49 @@
   animation: float-gentle 2.8s ease-in-out infinite;
 }
 
+/* Futuristic Background Keyframe Animations */
+@keyframes aurora-wave {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  50% { transform: translate3d(-5%, 8%, 0) rotate(180deg) scale(1.15); }
+  100% { transform: translate3d(0, 0, 0) rotate(360deg) scale(1); }
+}
+
+@keyframes blob-pulse {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.35; }
+  50% { transform: translate3d(30px, -40px, 0) scale(1.25); opacity: 0.55; }
+}
+
+@keyframes grid-scroll {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(40px); }
+}
+
+@keyframes particle-float {
+  0% { transform: translate3d(0, 0, 0); opacity: 0.2; }
+  50% { transform: translate3d(20px, -50px, 0); opacity: 0.8; }
+  100% { transform: translate3d(0, -100px, 0); opacity: 0; }
+}
+
+.animate-aurora {
+  animation: aurora-wave 20s linear infinite;
+  will-change: transform;
+}
+
+.animate-blob-1 {
+  animation: blob-pulse 8s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.animate-blob-2 {
+  animation: blob-pulse 12s ease-in-out infinite reverse;
+  will-change: transform, opacity;
+}
+
+.animate-grid-perspective {
+  animation: grid-scroll 3s linear infinite;
+  will-change: transform;
+}
+
 /* Custom Light & Dark Mode Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

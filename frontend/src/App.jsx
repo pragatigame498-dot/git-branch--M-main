@@ -11,7 +11,7 @@ import SettingsModal from './components/SettingsModal';
 import Toast from './components/Toast';
 import { useTheme } from './context/ThemeContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import bgRobot from './assets/bg_robot.png';
+import FuturisticBackground from './components/FuturisticBackground';
 
 import { API_BASE_URL } from './config';
 
@@ -259,6 +259,9 @@ export default function App() {
       transition={{ duration: 0.5, ease: "easeInOut" }}
       className="flex h-screen w-screen overflow-hidden bg-[#F8FAFC] dark:bg-[#0F172A] text-[#111827] dark:text-white antialiased relative transition-colors duration-500"
     >
+      {/* Futuristic Animated AI Background */}
+      <FuturisticBackground />
+
       {/* AI-Generated Pill Badge with Pulsing Active Indicator */}
       <div className="absolute top-3 right-5 z-40 bg-white dark:bg-[#1E293B] px-3 py-1 rounded-full text-xs font-semibold text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800 shadow-sm hidden sm:flex items-center gap-2 transition-all duration-500">
         <span className="relative flex h-2 w-2">
