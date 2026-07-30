@@ -68,17 +68,14 @@ def fix_typos(text: str) -> str:
 
 def is_non_js_topic_query(text: str) -> bool:
     text_lower = text.lower().strip()
-    words = set(re.findall(r"\b[a-z0-9\+#]+\b", text_lower))
-
-    if "javascript" in words or "js" in words:
-        for non_js in ["python", "css", "html", "java", "sql", "c++", "c#"]:
-            if f"what is {non_js}" in text_lower or f"explain {non_js}" in text_lower:
-                return True
-        return False
-
-    for non_js in NON_JS_TOPICS:
-        if non_js in words or f"what is {non_js}" in text_lower:
+    forbidden = ["python", "css", "html", "c++", "c#", "sql", "react", "database", "networking", "machine learning", "operating system"]
+    
+    for topic in forbidden:
+        if re.search(r"\b" + re.escape(topic) + r"\b", text_lower):
             return True
+
+    if re.search(r"\bjava\b", text_lower) and not re.search(r"\bjavascript\b", text_lower) and not re.search(r"\bjs\b", text_lower):
+        return True
 
     return False
 
@@ -405,7 +402,11 @@ ANSWER
                 print(f"[CLOUD LLM] Generating structured answer using ({cloud_model})...")
                 response = _GEMINI_CLIENT.models.generate_content(
                     model=cloud_model,
-                    contents=prompt
+                    contents=prompt,
+                    config={
+                        "max_output_tokens": 300,
+                        "temperature": 0.2,
+                    }
                 )
                 if response and response.text:
                     answer = response.text.strip()
@@ -416,12 +417,21 @@ ANSWER
     if not answer:
         try:
             print("[LOCAL OLLAMA] Generating fast structured answer using Local Model...")
+            fast_context = doc_context[:900] + "..." if len(doc_context) > 900 else doc_context
+            fast_prompt = f"""Answer ONLY using provided context.
+CONTEXT:
+{fast_context}
+
+QUESTION:
+{question}
+
+ANSWER IN MARKDOWN WITH HEADINGS (# Topic, ## Definition, ## Explanation):"""
             response = ollama.chat(
                 model="gemma3:4b",
-                messages=[{"role": "user", "content": prompt}],
+                messages=[{"role": "user", "content": fast_prompt}],
                 options={
-                    "num_predict": 250,
-                    "num_ctx": 1024,
+                    "num_predict": 100,
+                    "num_ctx": 384,
                     "num_thread": 8,
                     "temperature": 0.1,
                     "top_k": 10,
