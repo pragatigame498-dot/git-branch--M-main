@@ -1,10 +1,10 @@
 import React, { useState, useRef, memo } from 'react';
 import { motion } from 'framer-motion';
-import { Send, Paperclip, Loader2 } from 'lucide-react';
+import { Send, Paperclip, Loader2, Sparkles, CornerDownLeft } from 'lucide-react';
 
 // ==============================================================================
-// PREMIUM ANIMATED CHAT INPUT
-// Features floating border glow, send button pulse when active, & micro-interactions.
+// 2026 NEXT-GEN AI CHAT INPUT (Linear.app / v0 / Claude 3.5 Inspired)
+// Features floating border glow, active text pulse, & shortcut indicators.
 // ==============================================================================
 
 function ChatInput({ onSendMessage, isLoading, onOpenUploadModal }) {
@@ -45,20 +45,25 @@ function ChatInput({ onSendMessage, isLoading, onOpenUploadModal }) {
         <motion.div 
           animate={{ 
             boxShadow: isFocused 
-              ? "0 0 20px rgba(142, 114, 255, 0.25)" 
-              : "0 2px 10px rgba(0, 0, 0, 0.05)"
+              ? "0 0 25px rgba(142, 114, 255, 0.3), 0 0 10px rgba(0, 242, 254, 0.2)" 
+              : "0 4px 15px rgba(0, 0, 0, 0.05)"
           }}
           transition={{ duration: 0.3 }}
           className={`
-            relative flex items-center bg-[#F8FAFC] dark:bg-[#0F172A] 
-            border transition-all duration-300 rounded-full p-1.5 pl-4
+            relative flex items-center bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-2xl
+            border transition-all duration-300 rounded-[24px] p-2 pl-4 shadow-xl
             ${isFocused 
-              ? 'border-[#8E72FF] dark:border-purple-500 bg-white dark:bg-[#1E293B]' 
-              : 'border-slate-200 dark:border-slate-700'
+              ? 'border-[#8E72FF] dark:border-purple-500/80 bg-white dark:bg-[#1E293B]' 
+              : 'border-slate-200/80 dark:border-slate-700/80'
             }
           `}
         >
           
+          {/* AI Sparkle Icon Indicator */}
+          <div className="p-1.5 text-purple-500 dark:text-purple-400 shrink-0">
+            <Sparkles className="w-4.5 h-4.5 animate-pulse" />
+          </div>
+
           {/* Attachment Button */}
           <motion.button
             whileHover={{ scale: 1.1, rotate: -15 }}
@@ -66,9 +71,9 @@ function ChatInput({ onSendMessage, isLoading, onOpenUploadModal }) {
             type="button"
             onClick={onOpenUploadModal}
             title="Upload PDF Document"
-            className="p-2 text-slate-400 dark:text-slate-400 hover:text-[#8E72FF] dark:hover:text-purple-300 hover:bg-slate-200/50 dark:hover:bg-slate-800 rounded-full transition-colors shrink-0 cursor-pointer"
+            className="p-1.5 text-slate-400 dark:text-slate-400 hover:text-[#8E72FF] dark:hover:text-purple-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors shrink-0 cursor-pointer"
           >
-            <Paperclip className="w-5 h-5" />
+            <Paperclip className="w-4.5 h-4.5" />
           </motion.button>
 
           {/* Input Textarea */}
@@ -81,8 +86,16 @@ function ChatInput({ onSendMessage, isLoading, onOpenUploadModal }) {
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             placeholder="Ask anything about your PDF document..."
-            className="flex-1 bg-transparent border-none outline-none text-[#111827] dark:text-white placeholder-slate-400 text-sm px-3 py-1.5 resize-none max-h-30 leading-relaxed font-medium transition-colors"
+            className="flex-1 bg-transparent border-none outline-none text-[#1C1C1E] dark:text-white placeholder-slate-400 text-xs sm:text-sm px-3 py-1.5 resize-none max-h-30 leading-relaxed font-medium transition-colors"
           />
+
+          {/* Linear-Style Shortcut Pill (Visible when text present on Desktop) */}
+          {hasContent && (
+            <span className="hidden md:flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-md mr-2 shrink-0">
+              <span>Enter</span>
+              <CornerDownLeft className="w-3 h-3" />
+            </span>
+          )}
 
           {/* Submit Button */}
           <motion.button
@@ -93,17 +106,17 @@ function ChatInput({ onSendMessage, isLoading, onOpenUploadModal }) {
             type="submit"
             disabled={!hasContent || isLoading}
             className={`
-              w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all duration-300 cursor-pointer shadow-md
+              w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all duration-300 cursor-pointer shadow-md
               ${hasContent && !isLoading
-                ? 'bg-[#8E72FF] hover:bg-[#7c5efc] text-white shadow-[#8E72FF]/40' 
+                ? 'bg-gradient-to-r from-[#8E72FF] to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white shadow-purple-500/30' 
                 : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed shadow-none'
               }
             `}
           >
             {isLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <Send className="w-4.5 h-4.5 ml-0.5" />
+              <Send className="w-4 h-4 ml-0.5" />
             )}
           </motion.button>
 
