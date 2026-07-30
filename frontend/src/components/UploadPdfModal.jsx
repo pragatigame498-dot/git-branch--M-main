@@ -2,6 +2,7 @@ import React, { useState, useRef, memo } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL } from '../config';
+import AnimatedRobot from './AnimatedRobot';
 import { 
   UploadCloud, 
   FileText, 
@@ -224,14 +225,14 @@ function UploadPdfModal({ isOpen, onClose, onUploadSuccess }) {
               <div className="py-6 px-4 space-y-6">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-950/80 flex items-center justify-center text-purple-600 dark:text-purple-300 shrink-0">
-                    <FileText className="w-6 h-6 animate-pulse" />
+                    <AnimatedRobot size="sm" isThinking={true} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-[#111827] dark:text-white truncate">
                       {selectedFile?.name}
                     </p>
                     <p className="text-xs text-purple-600 dark:text-purple-400 flex items-center gap-1.5 mt-0.5 font-medium">
-                      <Loader2 className="w-3 h-3 animate-spin text-purple-600" />
+                      <span className="w-2 h-2 rounded-full bg-purple-500 animate-ping" />
                       <span>{uploadState === 'uploading' ? 'Uploading PDF file...' : 'Creating embeddings & vector database...'}</span>
                     </p>
                   </div>
