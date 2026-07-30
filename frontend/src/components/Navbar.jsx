@@ -1,11 +1,12 @@
 import React, { memo } from 'react';
+import { motion } from 'framer-motion';
 import { Menu, Upload, Settings, Sun, Moon } from 'lucide-react';
 import robotImg from '../assets/robot.png';
 import { useTheme } from '../context/ThemeContext';
 
 // ==============================================================================
-// PERFORMANCE OPTIMIZATION:
-// Memoized Navbar component prevents unnecessary header re-renders.
+// PERFORMANCE & ANIMATION OPTIMIZATION:
+// Memoized Navbar with Framer Motion micro-interactions.
 // ==============================================================================
 
 function Navbar({
@@ -20,17 +21,22 @@ function Navbar({
     <header className="h-16 bg-[#8E72FF] text-white px-5 flex items-center justify-between shrink-0 shadow-md rounded-t-3xl z-30 transition-colors duration-300">
       {/* Left: Mobile Menu & Clean 3D Robot Logo */}
       <div className="flex items-center gap-3 min-w-0">
-        <button
+        <motion.button
+          whileTap={{ scale: 0.9 }}
           onClick={onToggleMobileSidebar}
-          className="lg:hidden p-1.5 rounded-full bg-white/15 hover:bg-white/25 text-white transition-colors"
+          className="lg:hidden p-1.5 rounded-full bg-white/15 hover:bg-white/25 text-white transition-colors cursor-pointer"
         >
           <Menu className="w-5 h-5" />
-        </button>
+        </motion.button>
 
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-10 h-12 flex items-center justify-center shrink-0 animate-float">
+          <motion.div 
+            animate={{ y: [0, -3, 0] }}
+            transition={{ repeat: Infinity, duration: 2.8, ease: "easeInOut" }}
+            className="w-10 h-12 flex items-center justify-center shrink-0"
+          >
             <img src={robotImg} alt="3D Robot" className="w-full h-full object-contain filter drop-shadow-md" />
-          </div>
+          </motion.div>
 
           <div className="min-w-0">
             <h2 className="font-extrabold text-white text-base leading-tight truncate">
@@ -45,34 +51,41 @@ function Navbar({
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
-        <button
+        <motion.button
+          whileHover={{ scale: 1.04 }}
+          whileTap={{ scale: 0.95 }}
           onClick={onOpenUploadModal}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white/20 hover:bg-white/30 text-white border border-white/30 text-xs font-semibold rounded-full backdrop-blur-sm transition-all shadow-2xs"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white/20 hover:bg-white/30 text-white border border-white/30 text-xs font-semibold rounded-full backdrop-blur-sm transition-all shadow-2xs cursor-pointer"
         >
           <Upload className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Upload PDF</span>
-        </button>
+        </motion.button>
 
         {/* Theme Toggle Button (Sun / Moon) */}
-        <button
+        <motion.button
+          whileHover={{ scale: 1.08, rotate: 15 }}
+          whileTap={{ scale: 0.92 }}
           onClick={toggleTheme}
           title={isDarkMode ? "Switch to Light Mode ☀️" : "Switch to Dark Mode 🌙"}
-          className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95"
+          className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-all cursor-pointer"
         >
           {isDarkMode ? (
-            <Sun className="w-4 h-4 text-amber-300 animate-pulse" />
+            <Sun className="w-4.5 h-4.5 text-amber-300" />
           ) : (
-            <Moon className="w-4 h-4 text-purple-200" />
+            <Moon className="w-4.5 h-4.5 text-purple-100" />
           )}
-        </button>
+        </motion.button>
 
-        <button
+        {/* Settings Button */}
+        <motion.button
+          whileHover={{ scale: 1.08, rotate: 30 }}
+          whileTap={{ scale: 0.92 }}
           onClick={onOpenSettings}
-          title="Settings"
-          className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors"
+          title="Open Settings"
+          className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-all cursor-pointer"
         >
-          <Settings className="w-4 h-4" />
-        </button>
+          <Settings className="w-4.5 h-4.5" />
+        </motion.button>
       </div>
     </header>
   );
