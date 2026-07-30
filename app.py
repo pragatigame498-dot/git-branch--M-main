@@ -41,9 +41,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="RAG AI Assistant API with Persistent Chat History & AI Memory", lifespan=lifespan)
 
+allowed_origins_raw = os.getenv("ALLOWED_ORIGINS", "*")
+allowed_origins = [origin.strip() for origin in allowed_origins_raw.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins if allowed_origins != ["*"] else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -59,11 +62,13 @@ class CreateChatRequest(BaseModel):
 class DeletePdfRequest(BaseModel):
     filename: str
 
+@app.get("/health")
 @app.get("/")
-async def home():
+async def health_check():
     return {
-        "message": "RAG AI Assistant API Running with Persistent Chat History & AI Memory 🚀",
-        "status": "online"
+        "status": "healthy",
+        "service": "RAG AI Assistant API",
+        "version": "1.0.0"
     }
 
 # ==============================================================================

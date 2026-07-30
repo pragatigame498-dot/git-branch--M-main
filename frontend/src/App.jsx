@@ -12,6 +12,8 @@ import Toast from './components/Toast';
 import { useTheme } from './context/ThemeContext';
 import bgRobot from './assets/bg_robot.png';
 
+import { API_BASE_URL } from './config';
+
 // ==============================================================================
 // PERSISTENT CHAT HISTORY & AI MEMORY APP CONTROLLER
 // Syncs conversations, user memories, and document context with SQLite database.
@@ -32,7 +34,6 @@ export default function App() {
   const [toast, setToast] = useState(null);
 
   const chatEndRef = useRef(null);
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
   // ----------------------------------------------------------------------------
   // 1. FETCH ALL CHATS FROM SQLITE BACKEND ON MOUNT
