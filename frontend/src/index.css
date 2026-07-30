@@ -242,31 +242,50 @@
 
 .prose-custom table {
   width: 100%;
-  border-collapse: collapse;
-  margin-top: 0.6rem;
-  margin-bottom: 0.6rem;
-  font-size: 0.85rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.dark .prose-custom table {
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .prose-custom th, .prose-custom td {
-  border: 1px solid #E2E8F0;
-  padding: 0.45rem 0.65rem;
+  padding: 0.6rem 0.85rem;
   text-align: left;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .dark .prose-custom th, .dark .prose-custom td {
-  border-color: #334155;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.prose-custom tr:last-child td {
+  border-bottom: none;
+}
+
+.prose-custom tr:nth-child(even) {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.dark .prose-custom tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.03);
 }
 
 .prose-custom th {
-  background-color: #F1F5F9;
-  font-weight: 600;
-  color: #475569;
+  background-color: rgba(0, 0, 0, 0.05);
+  font-weight: 700;
+  color: inherit;
 }
 
 .dark .prose-custom th {
-  background-color: #1E293B;
-  color: #F8FAFC;
+  background-color: rgba(255, 255, 255, 0.08);
 }
 
 .prose-custom code {
