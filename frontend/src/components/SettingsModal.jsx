@@ -1,17 +1,15 @@
 import React, { useState, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Sliders, Cpu, Database, Check, Sun, Moon, Palette } from 'lucide-react';
+import { X, Sliders, Check, Sun, Moon, Palette, Command, Sparkles, ShieldCheck } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 
 // ==============================================================================
-// PERFORMANCE OPTIMIZATION:
-// Memoized SettingsModal component prevents re-rendering modal UI when hidden.
+// PREMIUM SETTINGS & KEYBOARD SHORTCUTS MODAL
+// Includes theme switching, AI engine status, & Linear-style keyboard shortcuts guide.
 // ==============================================================================
 
 function SettingsModal({ isOpen, onClose }) {
   const { isDarkMode, setTheme } = useTheme();
-  const [model, setModel] = useState('rag-deepseek-v3');
-  const [temperature, setTemperature] = useState(0.2);
   const [saved, setSaved] = useState(false);
 
   if (!isOpen) return null;
@@ -21,8 +19,15 @@ function SettingsModal({ isOpen, onClose }) {
     setTimeout(() => {
       setSaved(false);
       onClose();
-    }, 600);
+    }, 500);
   };
+
+  const shortcuts = [
+    { key: "⌘ / Ctrl + K", label: "Search Chat History" },
+    { key: "⌘ / Ctrl + Enter", label: "Send Prompt Message" },
+    { key: "Shift + Enter", label: "Insert New Line" },
+    { key: "Esc", label: "Close Modal / Cancel" }
+  ];
 
   return (
     <AnimatePresence>
@@ -33,131 +38,114 @@ function SettingsModal({ isOpen, onClose }) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-md"
         />
 
         {/* Modal Window */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 10 }}
+          initial={{ opacity: 0, scale: 0.9, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 10 }}
-          className="relative w-full max-w-md p-6 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700/80 rounded-[16px] shadow-2xl text-[#111827] dark:text-white z-10 transition-colors duration-300"
+          exit={{ opacity: 0, scale: 0.9, y: 15 }}
+          transition={{ type: "spring", stiffness: 350, damping: 25 }}
+          className="relative w-full max-w-md p-6 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700/80 rounded-3xl shadow-2xl text-[#111827] dark:text-white z-10 transition-colors duration-500"
         >
           {/* Header */}
           <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-200 dark:border-slate-700/80">
             <div className="flex items-center gap-2.5">
-              <Sliders className="w-4.5 h-4.5 text-purple-600 dark:text-purple-400" />
-              <h3 className="font-semibold text-base text-[#111827] dark:text-white tracking-tight">Settings</h3>
+              <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-950/80 flex items-center justify-center text-purple-600 dark:text-purple-400">
+                <Sliders className="w-4 h-4" />
+              </div>
+              <h3 className="font-bold text-base text-[#111827] dark:text-white tracking-tight">Preferences & Shortcuts</h3>
             </div>
 
-            <button
+            <motion.button
+              whileHover={{ rotate: 90, scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
               onClick={onClose}
-              className="p-1 rounded-lg text-slate-400 hover:text-[#111827] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
-              <X className="w-4.5 h-4.5" />
-            </button>
+              <X className="w-4 h-4" />
+            </motion.button>
           </div>
 
-          <div className="space-y-4 text-xs">
+          <div className="space-y-5 text-xs">
             {/* Theme Toggle Selection */}
             <div>
-              <label className="block font-medium text-[#111827] dark:text-slate-200 mb-1.5 flex items-center gap-2">
+              <label className="block font-bold text-[#111827] dark:text-slate-200 mb-2 flex items-center gap-2">
                 <Palette className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                 <span>Appearance Theme</span>
               </label>
 
               <div className="grid grid-cols-2 gap-2.5">
                 <button
-                  type="button"
                   onClick={() => setTheme('light')}
-                  className={`
-                    flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border font-semibold text-xs transition-all cursor-pointer
-                    ${!isDarkMode 
-                      ? 'bg-purple-600 text-white border-purple-600 shadow-md' 
-                      : 'bg-[#F8FAFC] dark:bg-[#0F172A] border-slate-200 dark:border-slate-700 text-[#111827] dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                    }
-                  `}
+                  className={`flex items-center justify-center gap-2 p-3 rounded-2xl border font-semibold transition-all cursor-pointer ${
+                    !isDarkMode
+                      ? 'border-purple-600 bg-purple-50 text-purple-700 shadow-xs'
+                      : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
                 >
-                  <Sun className={`w-4 h-4 ${!isDarkMode ? 'text-amber-300' : 'text-amber-500'}`} />
+                  <Sun className="w-4 h-4 text-amber-500" />
                   <span>Light Mode</span>
                 </button>
 
                 <button
-                  type="button"
                   onClick={() => setTheme('dark')}
-                  className={`
-                    flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border font-semibold text-xs transition-all cursor-pointer
-                    ${isDarkMode 
-                      ? 'bg-purple-600 text-white border-purple-600 shadow-md' 
-                      : 'bg-[#F8FAFC] dark:bg-[#0F172A] border-slate-200 dark:border-slate-700 text-[#111827] dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                    }
-                  `}
+                  className={`flex items-center justify-center gap-2 p-3 rounded-2xl border font-semibold transition-all cursor-pointer ${
+                    isDarkMode
+                      ? 'border-purple-500 bg-purple-950/60 text-purple-300 shadow-xs'
+                      : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
                 >
-                  <Moon className={`w-4 h-4 ${isDarkMode ? 'text-purple-200' : 'text-purple-500'}`} />
+                  <Moon className="w-4 h-4 text-purple-400" />
                   <span>Dark Mode</span>
                 </button>
               </div>
             </div>
 
-            {/* Model Selection */}
+            {/* Keyboard Shortcuts Guide */}
             <div>
-              <label className="block font-medium text-[#111827] dark:text-slate-200 mb-1.5 flex items-center gap-2">
-                <Cpu className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                <span>RAG Model</span>
+              <label className="block font-bold text-[#111827] dark:text-slate-200 mb-2 flex items-center gap-2">
+                <Command className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <span>Linear-Style Keyboard Shortcuts</span>
               </label>
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="w-full p-2.5 bg-[#F8FAFC] dark:bg-[#0F172A] border border-slate-200 dark:border-slate-700 rounded-[12px] text-[#111827] dark:text-white focus:outline-none focus:border-purple-500 transition-colors"
-              >
-                <option value="rag-deepseek-v3" className="bg-white dark:bg-[#1E293B]">Local Vector Store Model</option>
-                <option value="gpt-4o" className="bg-white dark:bg-[#1E293B]">GPT-4o RAG Pipeline</option>
-                <option value="claude-3-5-sonnet" className="bg-white dark:bg-[#1E293B]">Claude 3.5 Sonnet RAG</option>
-              </select>
+
+              <div className="space-y-1.5 p-3 rounded-2xl bg-slate-50 dark:bg-[#0F172A] border border-slate-200/60 dark:border-slate-800">
+                {shortcuts.map((sc, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-xs py-1">
+                    <span className="text-slate-600 dark:text-slate-400 font-medium">{sc.label}</span>
+                    <kbd className="px-2 py-0.5 text-[10px] font-mono font-bold bg-white dark:bg-slate-800 text-purple-600 dark:text-purple-300 border border-slate-200 dark:border-slate-700 rounded-md shadow-2xs">
+                      {sc.key}
+                    </kbd>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            {/* Temperature Slider */}
-            <div>
-              <div className="flex justify-between items-center mb-1.5 font-medium text-[#111827] dark:text-slate-200">
-                <label className="flex items-center gap-2">
-                  <Database className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                  <span>Temperature</span>
-                </label>
-                <span className="text-purple-600 dark:text-purple-400 font-mono font-bold">{temperature}</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={temperature}
-                onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                className="w-full accent-purple-600 dark:accent-purple-500 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer"
-              />
+            {/* AI Engine Status */}
+            <div className="p-3 rounded-2xl bg-purple-50/60 dark:bg-purple-950/40 border border-purple-200/60 dark:border-purple-800/40 flex items-center gap-2.5 text-xs text-purple-900 dark:text-purple-200 font-medium">
+              <ShieldCheck className="w-4 h-4 text-purple-600 shrink-0" />
+              <span>Engine Status: <strong>Google Gemini 2.0 Flash</strong> & <strong>Chroma Vector Store</strong> active.</span>
             </div>
           </div>
 
-          {/* Footer Save */}
-          <div className="flex items-center justify-end gap-2.5 mt-6 pt-4 border-t border-slate-200 dark:border-slate-700/80">
-            <button
-              onClick={onClose}
-              className="px-3.5 py-2 rounded-[12px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-[#111827] dark:text-slate-200 text-xs font-semibold transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
+          {/* Footer Action */}
+          <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700/80 flex justify-end">
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
               onClick={handleSave}
-              className="px-4 py-2 rounded-[12px] bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs flex items-center gap-1.5 cursor-pointer transition-all shadow-md"
+              className="px-5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-xs rounded-xl shadow-md shadow-purple-600/30 flex items-center gap-1.5 cursor-pointer"
             >
               {saved ? (
                 <>
-                  <Check className="w-4 h-4 text-white" />
-                  <span>Saved</span>
+                  <Check className="w-4 h-4" />
+                  <span>Saved!</span>
                 </>
               ) : (
-                <span>Save Settings</span>
+                <span>Done</span>
               )}
-            </button>
+            </motion.button>
           </div>
         </motion.div>
       </div>
