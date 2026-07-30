@@ -3,11 +3,11 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { motion } from 'framer-motion';
 import { User, Copy, Check, RefreshCw } from 'lucide-react';
-import robotImg from '../assets/robot.png';
+import AnimatedRobot from './AnimatedRobot';
 
 // ==============================================================================
 // PERFORMANCE & ANIMATION OPTIMIZATION:
-// Framer-motion entrance animations with memoization for zero lag.
+// Framer-motion entrance animations with Animated AI Robot avatar.
 // ==============================================================================
 
 function ChatMessage({ message, onCopySuccess, onRegenerate }) {
@@ -36,19 +36,11 @@ function ChatMessage({ message, onCopySuccess, onRegenerate }) {
       transition={{ duration: 0.25, ease: "easeOut" }}
       className={`flex gap-3 text-sm my-3.5 transition-all ${isUser ? 'justify-end' : 'justify-start'}`}
     >
-      {/* Clean 3D Robot Avatar with Subtle Floating Animation */}
+      {/* Animated AI Robot Avatar */}
       {!isUser && (
-        <motion.div 
-          animate={{ y: [0, -4, 0] }}
-          transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
-          className="w-12 h-14 shrink-0 flex items-center justify-center mt-0.5"
-        >
-          <img 
-            src={robotImg} 
-            alt="3D Robot Avatar" 
-            className="w-full h-full object-contain filter drop-shadow-md" 
-          />
-        </motion.div>
+        <div className="w-10 h-12 shrink-0 flex items-center justify-center mt-0.5">
+          <AnimatedRobot size="sm" />
+        </div>
       )}
 
       {/* Message Bubble Container */}

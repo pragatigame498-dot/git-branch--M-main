@@ -1,10 +1,10 @@
 import React, { memo } from 'react';
 import { motion } from 'framer-motion';
-import robotImg from '../assets/robot.png';
+import AnimatedRobot from './AnimatedRobot';
 
 // ==============================================================================
 // PREMIUM ANIMATED TYPING INDICATOR
-// Features bouncing 3D robot avatar, floating speech bubble, & staggered pulse dots.
+// Features Interactive Animated Robot (Thinking Mode with Orbital Rings & Glowing Eyes).
 // ==============================================================================
 
 function TypingIndicator() {
@@ -21,23 +21,10 @@ function TypingIndicator() {
       transition={{ duration: 0.25, ease: "easeOut" }}
       className="flex items-center justify-start gap-3 my-4 w-full"
     >
-      {/* 3D Robot Thinking Animation: Bouncing & Subtle Head Tilt */}
-      <motion.div 
-        animate={{ 
-          y: [0, -8, 0],
-          rotate: [0, -3, 3, 0]
-        }}
-        transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
-        className="relative shrink-0"
-      >
-        <div className="w-14 h-18 flex items-center justify-center">
-          <img 
-            src={robotImg} 
-            alt="3D Thinking Robot" 
-            className="w-full h-full object-contain filter drop-shadow-xl"
-          />
-        </div>
-      </motion.div>
+      {/* Interactive AI Robot in Thinking State */}
+      <div className="shrink-0 flex items-center justify-center">
+        <AnimatedRobot size="md" isThinking={true} />
+      </div>
 
       {/* Glassmorphism Thinking Bubble */}
       <motion.div 

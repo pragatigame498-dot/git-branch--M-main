@@ -1,12 +1,12 @@
 import React, { memo } from 'react';
 import { motion } from 'framer-motion';
 import { Menu, Upload, Settings, Sun, Moon } from 'lucide-react';
-import robotImg from '../assets/robot.png';
+import AnimatedRobot from './AnimatedRobot';
 import { useTheme } from '../context/ThemeContext';
 
 // ==============================================================================
 // PERFORMANCE & ANIMATION OPTIMIZATION:
-// Memoized Navbar with Framer Motion micro-interactions.
+// Memoized Navbar with Animated Interactive Robot Logo.
 // ==============================================================================
 
 function Navbar({
@@ -30,13 +30,9 @@ function Navbar({
         </motion.button>
 
         <div className="flex items-center gap-2.5 min-w-0">
-          <motion.div 
-            animate={{ y: [0, -3, 0] }}
-            transition={{ repeat: Infinity, duration: 2.8, ease: "easeInOut" }}
-            className="w-10 h-12 flex items-center justify-center shrink-0"
-          >
-            <img src={robotImg} alt="3D Robot" className="w-full h-full object-contain filter drop-shadow-md" />
-          </motion.div>
+          <div className="w-9 h-11 flex items-center justify-center shrink-0">
+            <AnimatedRobot size="sm" />
+          </div>
 
           <div className="min-w-0">
             <h2 className="font-extrabold text-white text-base leading-tight truncate">

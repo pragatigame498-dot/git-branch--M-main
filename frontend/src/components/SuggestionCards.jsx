@@ -1,11 +1,11 @@
 import React, { memo } from 'react';
 import { motion } from 'framer-motion';
 import { FileText, Code2, Briefcase } from 'lucide-react';
-import robotImg from '../assets/robot.png';
+import AnimatedRobot from './AnimatedRobot';
 
 // ==============================================================================
 // PERFORMANCE & ANIMATION OPTIMIZATION:
-// Framer Motion entrance & hover animations for Suggestion Cards.
+// Framer Motion entrance & hover animations for Suggestion Cards with Animated Robot Hero.
 // ==============================================================================
 
 function SuggestionCards({ onSelectCard, onOpenUploadModal }) {
@@ -53,24 +53,14 @@ function SuggestionCards({ onSelectCard, onOpenUploadModal }) {
       variants={containerVariants}
       className="w-full max-w-3xl mx-auto flex flex-col items-center justify-center min-h-[55vh] text-center px-4"
     >
-      {/* Clean 3D Thinking Robot Hero Image */}
+      {/* Interactive Animated AI Robot Hero */}
       <motion.div 
-        whileHover={{ scale: 1.08 }}
+        whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        className="relative mb-3 cursor-pointer" 
+        className="relative mb-2 cursor-pointer" 
         onClick={onOpenUploadModal}
       >
-        <motion.div 
-          animate={{ y: [0, -6, 0] }}
-          transition={{ repeat: Infinity, duration: 3.5, ease: "easeInOut" }}
-          className="w-36 h-40 flex items-center justify-center"
-        >
-          <img 
-            src={robotImg} 
-            alt="3D Thinking Robot" 
-            className="w-full h-full object-contain filter drop-shadow-2xl" 
-          />
-        </motion.div>
+        <AnimatedRobot size="lg" />
       </motion.div>
 
       <motion.h2 
