@@ -1,19 +1,21 @@
 import React, { memo } from 'react';
 import { motion } from 'framer-motion';
-import { Menu, Upload, Settings, Sun, Moon } from 'lucide-react';
+import { Menu, Upload, Settings, Sun, Moon, LayoutDashboard, MessageSquare } from 'lucide-react';
 import AnimatedRobot from './AnimatedRobot';
 import { useTheme } from '../context/ThemeContext';
 
 // ==============================================================================
 // PERFORMANCE & ANIMATION OPTIMIZATION:
-// Memoized Navbar with Animated Interactive Robot Logo.
+// Memoized Navbar with Animated Robot & View Toggle (Chat / Dashboard).
 // ==============================================================================
 
 function Navbar({
   chatTitle,
   onToggleMobileSidebar,
   onOpenUploadModal,
-  onOpenSettings
+  onOpenSettings,
+  viewMode = 'chat',
+  onToggleViewMode
 }) {
   const { isDarkMode, toggleTheme } = useTheme();
 
@@ -45,8 +47,30 @@ function Navbar({
         </div>
       </div>
 
-      {/* Right: Actions */}
+      {/* Right: Actions & Dashboard View Toggle */}
       <div className="flex items-center gap-2">
+        {onToggleViewMode && (
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onToggleViewMode}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white border border-white/30 text-xs font-semibold rounded-full backdrop-blur-sm transition-all cursor-pointer"
+            title={viewMode === 'chat' ? "Switch to Dashboard Analytics 📊" : "Switch to Chat View 💬"}
+          >
+            {viewMode === 'chat' ? (
+              <>
+                <LayoutDashboard className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Dashboard</span>
+              </>
+            ) : (
+              <>
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Chat</span>
+              </>
+            )}
+          </motion.button>
+        )}
+
         <motion.button
           whileHover={{ scale: 1.04 }}
           whileTap={{ scale: 0.95 }}

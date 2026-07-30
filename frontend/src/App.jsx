@@ -13,6 +13,7 @@ import { useTheme } from './context/ThemeContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import FuturisticBackground from './components/FuturisticBackground';
 import CursorGlow from './components/CursorGlow';
+import DashboardAnalytics from './components/DashboardAnalytics';
 
 import { API_BASE_URL } from './config';
 
@@ -28,6 +29,7 @@ export default function App() {
   const [activeMessages, setActiveMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [uploadedPdfs, setUploadedPdfs] = useState([]);
+  const [viewMode, setViewMode] = useState('chat'); // 'chat' | 'dashboard'
   
   // Modals & Drawers
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -299,18 +301,27 @@ export default function App() {
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex-1 flex flex-col h-full w-full max-w-4xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700/80 rounded-3xl shadow-2xl neon-border-glow overflow-hidden relative transition-colors duration-500"
         >
-          
-          {/* Header */}
+              {/* Header */}
           <Navbar
             chatTitle={activeChat?.title}
             onToggleMobileSidebar={handleToggleMobile}
             onOpenUploadModal={handleOpenUpload}
             onOpenSettings={handleOpenSettings}
+            viewMode={viewMode}
+            onToggleViewMode={() => setViewMode(prev => prev === 'chat' ? 'dashboard' : 'chat')}
           />
 
-          {/* Main Chat Area */}
+          {/* Main Area: Chat View OR Dashboard View */}
           <main className="flex-1 overflow-y-auto px-4 md:px-6 py-6 bg-[#F8FAFC]/50 dark:bg-[#0F172A]/50 transition-colors duration-500">
-            {activeMessages.length === 0 ? (
+            {viewMode === 'dashboard' ? (
+              <DashboardAnalytics
+                chats={chats}
+                activeMessages={activeMessages}
+                uploadedPdfs={uploadedPdfs}
+                onOpenUploadModal={handleOpenUpload}
+                onSwitchToChat={() => setViewMode('chat')}
+              />
+            ) : activeMessages.length === 0 ? (
               <SuggestionCards
                 onSelectCard={handleSendMessage}
                 onOpenUploadModal={handleOpenUpload}
@@ -337,12 +348,14 @@ export default function App() {
             )}
           </main>
 
-          {/* Input Bar */}
-          <ChatInput
-            onSendMessage={handleSendMessage}
-            isLoading={isLoading}
-            onOpenUploadModal={handleOpenUpload}
-          />
+          {/* Input Bar (Visible in Chat View) */}
+          {viewMode === 'chat' && (
+            <ChatInput
+              onSendMessage={handleSendMessage}
+              isLoading={isLoading}
+              onOpenUploadModal={handleOpenUpload}
+            />
+          )}
         </motion.div>
       </div>
 
