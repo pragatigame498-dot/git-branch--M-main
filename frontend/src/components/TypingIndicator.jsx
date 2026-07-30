@@ -3,38 +3,75 @@ import { motion } from 'framer-motion';
 import robotImg from '../assets/robot.png';
 
 // ==============================================================================
-// PERFORMANCE OPTIMIZATION:
-// Memoized TypingIndicator component renders instantly without layout shifts.
+// PREMIUM ANIMATED TYPING INDICATOR
+// Features bouncing 3D robot avatar, floating speech bubble, & staggered pulse dots.
 // ==============================================================================
 
 function TypingIndicator() {
+  const dotVariants = {
+    initial: { y: 0, opacity: 0.4 },
+    animate: { y: [-4, 4, -4], opacity: [0.4, 1, 0.4] }
+  };
+
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 12, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 8, scale: 0.96 }}
+      transition={{ duration: 0.25, ease: "easeOut" }}
       className="flex items-center justify-start gap-3 my-4 w-full"
     >
-      {/* Clean 3D Thinking Robot with Floating Animation */}
-      <div className="relative animate-float shrink-0">
-        <div className="w-16 h-20 flex items-center justify-center">
+      {/* 3D Robot Thinking Animation: Bouncing & Subtle Head Tilt */}
+      <motion.div 
+        animate={{ 
+          y: [0, -8, 0],
+          rotate: [0, -3, 3, 0]
+        }}
+        transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+        className="relative shrink-0"
+      >
+        <div className="w-14 h-18 flex items-center justify-center">
           <img 
             src={robotImg} 
             alt="3D Thinking Robot" 
-            className="w-full h-full object-contain filter drop-shadow-lg"
+            className="w-full h-full object-contain filter drop-shadow-xl"
           />
         </div>
-      </div>
+      </motion.div>
 
-      {/* Thinking Speech Bubble */}
-      <div className="px-5 py-3.5 rounded-3xl rounded-tl-xs bg-white dark:bg-[#1E293B] text-[#111827] dark:text-white border-2 border-slate-200 dark:border-slate-700/80 shadow-lg flex items-center gap-3 transition-colors duration-300">
-        <span className="text-sm font-bold text-[#8E72FF] dark:text-purple-400 tracking-wide">Thinking...</span>
+      {/* Glassmorphism Thinking Bubble */}
+      <motion.div 
+        animate={{ scale: [1, 1.02, 1] }}
+        transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+        className="px-5 py-3 rounded-2xl rounded-tl-xs bg-white/90 dark:bg-[#1E293B]/90 backdrop-blur-md text-[#111827] dark:text-white border border-purple-200 dark:border-purple-500/40 shadow-lg shadow-purple-500/10 flex items-center gap-3 transition-colors duration-500"
+      >
+        <span className="text-xs font-bold text-[#8E72FF] dark:text-purple-400 tracking-wide">
+          Thinking...
+        </span>
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 bg-[#8E72FF] dark:bg-purple-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-          <span className="w-2.5 h-2.5 bg-[#8E72FF] dark:bg-purple-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-          <span className="w-2.5 h-2.5 bg-[#8E72FF] dark:bg-purple-400 rounded-full animate-bounce"></span>
+          <motion.span 
+            variants={dotVariants}
+            initial="initial"
+            animate="animate"
+            transition={{ repeat: Infinity, duration: 0.9, ease: "easeInOut", delay: 0 }}
+            className="w-2.5 h-2.5 bg-[#8E72FF] dark:bg-purple-400 rounded-full shadow-xs"
+          />
+          <motion.span 
+            variants={dotVariants}
+            initial="initial"
+            animate="animate"
+            transition={{ repeat: Infinity, duration: 0.9, ease: "easeInOut", delay: 0.2 }}
+            className="w-2.5 h-2.5 bg-[#8E72FF] dark:bg-purple-400 rounded-full shadow-xs"
+          />
+          <motion.span 
+            variants={dotVariants}
+            initial="initial"
+            animate="animate"
+            transition={{ repeat: Infinity, duration: 0.9, ease: "easeInOut", delay: 0.4 }}
+            className="w-2.5 h-2.5 bg-[#8E72FF] dark:bg-purple-400 rounded-full shadow-xs"
+          />
         </div>
-      </div>
+      </motion.div>
     </motion.div>
   );
 }

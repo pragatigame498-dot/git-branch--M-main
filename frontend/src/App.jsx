@@ -252,19 +252,28 @@ export default function App() {
   }, [chats, activeChatId]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#F8FAFC] dark:bg-[#0F172A] text-[#111827] dark:text-white antialiased relative transition-colors duration-300">
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5, ease: "easeInOut" }}
+      className="flex h-screen w-screen overflow-hidden bg-[#F8FAFC] dark:bg-[#0F172A] text-[#111827] dark:text-white antialiased relative transition-colors duration-500"
+    >
       {/* Blurred Background Image */}
       <div 
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat filter blur-[8px] scale-105 z-0 transition-opacity duration-300 opacity-30 dark:opacity-20"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat filter blur-[8px] scale-105 z-0 transition-opacity duration-500 opacity-30 dark:opacity-20"
         style={{ backgroundImage: `url(${bgRobot})` }}
       />
 
       {/* Background Soft Tint */}
-      <div className="absolute inset-0 bg-[#F8FAFC]/80 dark:bg-[#0F172A]/80 z-0 transition-colors duration-300" />
+      <div className="absolute inset-0 bg-[#F8FAFC]/80 dark:bg-[#0F172A]/80 z-0 transition-colors duration-500" />
 
-      {/* AI-Generated Pill Badge */}
-      <div className="absolute top-3 right-5 z-40 bg-white dark:bg-[#1E293B] backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold text-purple-900 dark:text-purple-200 border border-slate-200 dark:border-slate-700 shadow-sm hidden sm:block transition-all">
-        AI Memory Active
+      {/* AI-Generated Pill Badge with Pulsing Active Indicator */}
+      <div className="absolute top-3 right-5 z-40 bg-white/90 dark:bg-[#1E293B]/90 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800 shadow-sm hidden sm:flex items-center gap-2 transition-all duration-500">
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        </span>
+        <span>AI Memory Active</span>
       </div>
 
       {/* Left Sidebar */}
@@ -287,7 +296,12 @@ export default function App() {
 
       {/* Main Workspace Container */}
       <div className="flex-1 flex flex-col h-full min-w-0 p-3 sm:p-5 md:p-8 relative overflow-hidden items-center justify-center z-10">
-        <div className="flex-1 flex flex-col h-full w-full max-w-4xl bg-white dark:bg-[#1E293B] backdrop-blur-xl border border-slate-200 dark:border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden relative transition-all duration-300">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.98, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+          className="flex-1 flex flex-col h-full w-full max-w-4xl bg-white/90 dark:bg-[#1E293B]/90 backdrop-blur-xl border border-slate-200 dark:border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden relative transition-colors duration-500"
+        >
           
           {/* Header */}
           <Navbar
@@ -298,7 +312,7 @@ export default function App() {
           />
 
           {/* Main Chat Area */}
-          <main className="flex-1 overflow-y-auto px-4 md:px-6 py-6 bg-[#F8FAFC] dark:bg-[#0F172A] transition-colors duration-300">
+          <main className="flex-1 overflow-y-auto px-4 md:px-6 py-6 bg-[#F8FAFC]/50 dark:bg-[#0F172A]/50 transition-colors duration-500">
             {activeMessages.length === 0 ? (
               <SuggestionCards
                 onSelectCard={handleSendMessage}
@@ -306,16 +320,20 @@ export default function App() {
               />
             ) : (
               <div className="w-full max-w-3xl mx-auto space-y-4 pb-4">
-                {activeMessages.map((msg, index) => (
-                  <ChatMessage
-                    key={msg.id || index}
-                    message={msg}
-                    onCopySuccess={showToast}
-                    onRegenerate={index === activeMessages.length - 1 && msg.sender === 'bot' ? handleRegenerate : null}
-                  />
-                ))}
+                <AnimatePresence>
+                  {activeMessages.map((msg, index) => (
+                    <ChatMessage
+                      key={msg.id || index}
+                      message={msg}
+                      onCopySuccess={showToast}
+                      onRegenerate={index === activeMessages.length - 1 && msg.sender === 'bot' ? handleRegenerate : null}
+                    />
+                  ))}
+                </AnimatePresence>
 
-                {isLoading && <TypingIndicator />}
+                <AnimatePresence>
+                  {isLoading && <TypingIndicator />}
+                </AnimatePresence>
 
                 <div ref={chatEndRef} />
               </div>
@@ -328,7 +346,7 @@ export default function App() {
             isLoading={isLoading}
             onOpenUploadModal={handleOpenUpload}
           />
-        </div>
+        </motion.div>
       </div>
 
       {/* Modals & Toast */}
@@ -347,6 +365,6 @@ export default function App() {
         toast={toast} 
         onClose={() => setToast(null)} 
       />
-    </div>
+    </motion.div>
   );
 }
