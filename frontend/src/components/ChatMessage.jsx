@@ -6,8 +6,8 @@ import { User, Copy, Check, RefreshCw } from 'lucide-react';
 import AnimatedRobot from './AnimatedRobot';
 
 // ==============================================================================
-// PERFORMANCE & ANIMATION OPTIMIZATION:
-// Framer-motion entrance animations with Animated AI Robot avatar.
+// ALIVE ANIMATED CHAT MESSAGE COMPONENT
+// Features spring entrance from left/right, scale bounce, hover glow, & animated copy.
 // ==============================================================================
 
 function ChatMessage({ message, onCopySuccess, onRegenerate }) {
@@ -31,9 +31,13 @@ function ChatMessage({ message, onCopySuccess, onRegenerate }) {
 
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 14, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.25, ease: "easeOut" }}
+      initial={{ 
+        opacity: 0, 
+        x: isUser ? 25 : -25, 
+        scale: isUser ? 0.96 : 0.94 
+      }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      transition={{ type: "spring", stiffness: 350, damping: 22 }}
       className={`flex gap-3 text-sm my-3.5 transition-all ${isUser ? 'justify-end' : 'justify-start'}`}
     >
       {/* Animated AI Robot Avatar */}
@@ -49,7 +53,7 @@ function ChatMessage({ message, onCopySuccess, onRegenerate }) {
           px-5 py-3.5 rounded-2xl transition-all duration-300 font-medium leading-relaxed
           ${isUser 
             ? 'bg-[#8E72FF] text-white rounded-tr-xs shadow-md shadow-[#8E72FF]/20 hover:shadow-lg hover:shadow-[#8E72FF]/30' 
-            : 'bg-white text-[#111827] border border-slate-200 dark:bg-[#1E293B] dark:text-white dark:border-slate-700/80 rounded-tl-xs shadow-sm hover:border-purple-300 dark:hover:border-purple-500/50'
+            : 'bg-white text-[#111827] border border-slate-200 dark:bg-[#1E293B] dark:text-white dark:border-slate-700/80 rounded-tl-xs shadow-sm hover:border-purple-300 dark:hover:border-purple-500/50 hover:shadow-md'
           }
         `}>
           {isUser ? (
@@ -69,16 +73,21 @@ function ChatMessage({ message, onCopySuccess, onRegenerate }) {
                         <div className="flex items-center justify-between px-4 py-1.5 bg-[#1E293B] border-b border-slate-700/60 text-slate-400 text-xs font-mono">
                           <span>{match[1]}</span>
                           <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
+                            whileHover={{ scale: 1.12 }}
+                            whileTap={{ scale: 0.92 }}
                             onClick={() => handleCopyCode(codeText, idx)}
                             className="flex items-center gap-1 hover:text-white transition-colors cursor-pointer"
                           >
                             {copiedCodeIndex === idx ? (
-                              <>
-                                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                                <span className="text-emerald-400">Copied</span>
-                              </>
+                              <motion.div 
+                                initial={{ scale: 0 }} 
+                                animate={{ scale: 1 }} 
+                                transition={{ type: "spring", stiffness: 400 }}
+                                className="flex items-center gap-1 text-emerald-400"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Copied</span>
+                              </motion.div>
                             ) : (
                               <>
                                 <Copy className="w-3.5 h-3.5" />
@@ -108,18 +117,24 @@ function ChatMessage({ message, onCopySuccess, onRegenerate }) {
         {/* Action Bar for Bot Messages */}
         {!isUser && (
           <div className="flex items-center gap-2 mt-1.5 px-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            {/* Copy Button */}
             <motion.button 
-              whileHover={{ scale: 1.08 }}
+              whileHover={{ scale: 1.12 }}
               whileTap={{ scale: 0.92 }}
               onClick={handleCopyAnswer}
-              className="flex items-center gap-1 text-xs text-slate-400 hover:text-[#8E72FF] transition-colors cursor-pointer"
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-[#8E72FF] transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
               title="Copy answer"
             >
               {isAnswerCopied ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-500" />
-                  <span className="text-emerald-500 text-[11px]">Copied</span>
-                </>
+                <motion.div 
+                  initial={{ scale: 0 }} 
+                  animate={{ scale: 1 }} 
+                  transition={{ type: "spring", stiffness: 400 }}
+                  className="flex items-center gap-1 text-emerald-500"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span className="text-[11px] font-bold">Copied</span>
+                </motion.div>
               ) : (
                 <>
                   <Copy className="w-3.5 h-3.5" />
@@ -128,12 +143,14 @@ function ChatMessage({ message, onCopySuccess, onRegenerate }) {
               )}
             </motion.button>
 
+            {/* Regenerate Button */}
             {onRegenerate && (
               <motion.button 
-                whileHover={{ scale: 1.08 }}
+                whileHover={{ scale: 1.12, rotate: 180 }}
                 whileTap={{ scale: 0.92 }}
+                transition={{ duration: 0.3 }}
                 onClick={onRegenerate}
-                className="flex items-center gap-1 text-xs text-slate-400 hover:text-[#8E72FF] transition-colors cursor-pointer"
+                className="flex items-center gap-1 text-xs text-slate-400 hover:text-[#8E72FF] hover:shadow-[0_0_12px_rgba(142,114,255,0.4)] transition-all cursor-pointer px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
                 title="Regenerate response"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
@@ -147,7 +164,7 @@ function ChatMessage({ message, onCopySuccess, onRegenerate }) {
       {/* User Avatar */}
       {isUser && (
         <motion.div 
-          whileHover={{ scale: 1.05 }}
+          whileHover={{ scale: 1.1 }}
           className="w-8 h-8 rounded-full bg-amber-100 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0 mt-0.5 shadow-xs"
         >
           <User className="w-4 h-4" />
