@@ -18,7 +18,7 @@ function Navbar({
   const { isDarkMode, toggleTheme } = useTheme();
 
   return (
-    <header className="h-16 bg-[#8E72FF] text-white px-5 flex items-center justify-between shrink-0 shadow-md rounded-t-3xl z-30 transition-colors duration-300">
+    <header className="h-16 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 animate-gradient-shift text-white px-5 flex items-center justify-between shrink-0 shadow-lg shadow-purple-500/20 rounded-t-3xl z-30 transition-colors duration-500">
       {/* Left: Mobile Menu & Clean 3D Robot Logo */}
       <div className="flex items-center gap-3 min-w-0">
         <motion.button
