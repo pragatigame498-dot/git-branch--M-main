@@ -299,7 +299,7 @@ export default function App() {
           initial={{ opacity: 0, scale: 0.98, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
-          className="flex-1 flex flex-col h-full w-full max-w-4xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700/80 rounded-3xl shadow-2xl neon-border-glow overflow-hidden relative transition-colors duration-500"
+          className="flex-1 flex flex-col h-full w-full max-w-4xl macos-glass macos-window-shadow rounded-[26px] overflow-hidden relative transition-colors duration-500"
         >
               {/* Header */}
           <Navbar

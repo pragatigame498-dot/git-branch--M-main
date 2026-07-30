@@ -20,27 +20,34 @@ function Navbar({
   const { isDarkMode, toggleTheme } = useTheme();
 
   return (
-    <header className="h-16 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 animate-gradient-shift text-white px-5 flex items-center justify-between shrink-0 shadow-lg shadow-purple-500/20 rounded-t-3xl z-30 transition-colors duration-500">
-      {/* Left: Mobile Menu & Clean 3D Robot Logo */}
+    <header className="h-14 macos-glass text-[#1C1C1E] dark:text-white px-5 flex items-center justify-between shrink-0 rounded-t-[26px] z-30 border-b border-black/5 dark:border-white/10 transition-colors duration-500">
+      {/* Left: macOS Traffic Light Controls & Clean 3D Robot Logo */}
       <div className="flex items-center gap-3 min-w-0">
+        {/* macOS Traffic Lights (Close 🔴, Minimize 🟡, Expand 🟢) */}
+        <div className="hidden sm:flex items-center gap-2 mr-1">
+          <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E0443E] hover:opacity-80 transition-opacity cursor-pointer shadow-2xs" title="Close Window" />
+          <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123] hover:opacity-80 transition-opacity cursor-pointer shadow-2xs" title="Minimize Window" />
+          <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29] hover:opacity-80 transition-opacity cursor-pointer shadow-2xs" title="Expand Window" />
+        </div>
+
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={onToggleMobileSidebar}
-          className="lg:hidden p-1.5 rounded-full bg-white/15 hover:bg-white/25 text-white transition-colors cursor-pointer"
+          className="lg:hidden p-1.5 rounded-full bg-black/5 dark:bg-white/10 text-[#1C1C1E] dark:text-white transition-colors cursor-pointer"
         >
-          <Menu className="w-5 h-5" />
+          <Menu className="w-4.5 h-4.5" />
         </motion.button>
 
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-11 flex items-center justify-center shrink-0">
+          <div className="w-8 h-10 flex items-center justify-center shrink-0">
             <AnimatedRobot size="sm" />
           </div>
 
           <div className="min-w-0">
-            <h2 className="font-extrabold text-white text-base leading-tight truncate">
+            <h2 className="font-bold text-[#1C1C1E] dark:text-white text-sm leading-tight tracking-tight truncate">
               ASA Bot
             </h2>
-            <p className="text-xs text-purple-100/90 truncate font-semibold">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate font-medium">
               {chatTitle || 'PDF Assistant'}
             </p>
           </div>
@@ -51,20 +58,20 @@ function Navbar({
       <div className="flex items-center gap-2">
         {onToggleViewMode && (
           <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.96 }}
             onClick={onToggleViewMode}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white border border-white/30 text-xs font-semibold rounded-full backdrop-blur-sm transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-[#1C1C1E] dark:text-white border border-black/5 dark:border-white/10 text-xs font-semibold rounded-full transition-all cursor-pointer shadow-2xs"
             title={viewMode === 'chat' ? "Switch to Dashboard Analytics 📊" : "Switch to Chat View 💬"}
           >
             {viewMode === 'chat' ? (
               <>
-                <LayoutDashboard className="w-3.5 h-3.5" />
+                <LayoutDashboard className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
                 <span className="hidden sm:inline">Dashboard</span>
               </>
             ) : (
               <>
-                <MessageSquare className="w-3.5 h-3.5" />
+                <MessageSquare className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
                 <span className="hidden sm:inline">Chat</span>
               </>
             )}
@@ -73,9 +80,9 @@ function Navbar({
 
         <motion.button
           whileHover={{ scale: 1.04 }}
-          whileTap={{ scale: 0.95 }}
+          whileTap={{ scale: 0.96 }}
           onClick={onOpenUploadModal}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white/20 hover:bg-white/30 text-white border border-white/30 text-xs font-semibold rounded-full backdrop-blur-sm transition-all shadow-2xs cursor-pointer"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#007AFF] hover:bg-[#0062D6] text-white text-xs font-semibold rounded-full transition-all shadow-md shadow-blue-500/20 cursor-pointer"
         >
           <Upload className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Upload PDF</span>
@@ -87,12 +94,12 @@ function Navbar({
           whileTap={{ scale: 0.92 }}
           onClick={toggleTheme}
           title={isDarkMode ? "Switch to Light Mode ☀️" : "Switch to Dark Mode 🌙"}
-          className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-all cursor-pointer"
+          className="w-8 h-8 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-[#1C1C1E] dark:text-white flex items-center justify-center transition-all cursor-pointer"
         >
           {isDarkMode ? (
-            <Sun className="w-4.5 h-4.5 text-amber-300" />
+            <Sun className="w-4 h-4 text-amber-400" />
           ) : (
-            <Moon className="w-4.5 h-4.5 text-purple-100" />
+            <Moon className="w-4 h-4 text-purple-600" />
           )}
         </motion.button>
 
@@ -102,9 +109,9 @@ function Navbar({
           whileTap={{ scale: 0.92 }}
           onClick={onOpenSettings}
           title="Open Settings"
-          className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-all cursor-pointer"
+          className="w-8 h-8 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-[#1C1C1E] dark:text-white flex items-center justify-center transition-all cursor-pointer"
         >
-          <Settings className="w-4.5 h-4.5" />
+          <Settings className="w-4 h-4" />
         </motion.button>
       </div>
     </header>
