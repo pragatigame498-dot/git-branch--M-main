@@ -259,17 +259,8 @@ export default function App() {
       transition={{ duration: 0.5, ease: "easeInOut" }}
       className="flex h-screen w-screen overflow-hidden bg-[#F8FAFC] dark:bg-[#0F172A] text-[#111827] dark:text-white antialiased relative transition-colors duration-500"
     >
-      {/* Blurred Background Image */}
-      <div 
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat filter blur-[8px] scale-105 z-0 transition-opacity duration-500 opacity-30 dark:opacity-20"
-        style={{ backgroundImage: `url(${bgRobot})` }}
-      />
-
-      {/* Background Soft Tint */}
-      <div className="absolute inset-0 bg-[#F8FAFC]/80 dark:bg-[#0F172A]/80 z-0 transition-colors duration-500" />
-
       {/* AI-Generated Pill Badge with Pulsing Active Indicator */}
-      <div className="absolute top-3 right-5 z-40 bg-white/90 dark:bg-[#1E293B]/90 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800 shadow-sm hidden sm:flex items-center gap-2 transition-all duration-500">
+      <div className="absolute top-3 right-5 z-40 bg-white dark:bg-[#1E293B] px-3 py-1 rounded-full text-xs font-semibold text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800 shadow-sm hidden sm:flex items-center gap-2 transition-all duration-500">
         <span className="relative flex h-2 w-2">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -301,7 +292,7 @@ export default function App() {
           initial={{ opacity: 0, scale: 0.98, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
-          className="flex-1 flex flex-col h-full w-full max-w-4xl bg-white/90 dark:bg-[#1E293B]/90 backdrop-blur-xl border border-slate-200 dark:border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden relative transition-colors duration-500"
+          className="flex-1 flex flex-col h-full w-full max-w-4xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden relative transition-colors duration-500"
         >
           
           {/* Header */}
