@@ -364,6 +364,7 @@ export default function App() {
         isOpen={isUploadModalOpen}
         onClose={handleCloseUpload}
         onUploadSuccess={handlePdfUploaded}
+        uploadedPdfs={uploadedPdfs}
       />
 
       <SettingsModal
