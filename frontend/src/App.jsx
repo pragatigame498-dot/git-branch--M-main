@@ -10,6 +10,7 @@ import UploadPdfModal from './components/UploadPdfModal';
 import SettingsModal from './components/SettingsModal';
 import Toast from './components/Toast';
 import { useTheme } from './context/ThemeContext';
+import { motion, AnimatePresence } from 'framer-motion';
 import bgRobot from './assets/bg_robot.png';
 
 import { API_BASE_URL } from './config';
