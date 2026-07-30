@@ -1,0 +1,180 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-inter: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  html {
+    color-scheme: light dark;
+  }
+
+  body {
+    font-family: var(--font-inter);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #F8FAFC;
+    color: #111827;
+    transition: background-color 300ms cubic-bezier(0.4, 0, 0.2, 1), color 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark body {
+    background-color: #0F172A;
+    color: #FFFFFF;
+  }
+
+  /* Global 300ms smooth theme transitions */
+  *, *::before, *::after {
+    transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 300ms;
+  }
+}
+
+/* Floating / Bouncing Animation for 3D Robot */
+@keyframes float-gentle {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-9px) rotate(1.5deg);
+  }
+}
+
+.animate-float {
+  animation: float-gentle 2.8s ease-in-out infinite;
+}
+
+/* Custom Light & Dark Mode Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(142, 114, 255, 0.35);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(142, 114, 255, 0.6);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(147, 51, 234, 0.4);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(147, 51, 234, 0.7);
+}
+
+/* Markdown Custom Formatting (Light & Dark Themes) */
+.prose-custom h1 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-top: 0.85rem;
+  margin-bottom: 0.45rem;
+  color: inherit;
+}
+
+.prose-custom h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-top: 0.75rem;
+  margin-bottom: 0.35rem;
+  color: inherit;
+}
+
+.prose-custom h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-top: 0.65rem;
+  margin-bottom: 0.25rem;
+  color: inherit;
+}
+
+.prose-custom p {
+  margin-bottom: 0.5rem;
+  line-height: 1.6;
+}
+
+.prose-custom ul {
+  list-style-type: disc;
+  padding-left: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose-custom ol {
+  list-style-type: decimal;
+  padding-left: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose-custom li {
+  margin-bottom: 0.2rem;
+}
+
+.prose-custom blockquote {
+  border-left: 3px solid #8E72FF;
+  padding-left: 0.7rem;
+  font-style: italic;
+  margin-top: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.prose-custom table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.6rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.85rem;
+}
+
+.prose-custom th, .prose-custom td {
+  border: 1px solid #E2E8F0;
+  padding: 0.45rem 0.65rem;
+  text-align: left;
+}
+
+.dark .prose-custom th, .dark .prose-custom td {
+  border-color: #334155;
+}
+
+.prose-custom th {
+  background-color: #F1F5F9;
+  font-weight: 600;
+  color: #475569;
+}
+
+.dark .prose-custom th {
+  background-color: #1E293B;
+  color: #F8FAFC;
+}
+
+.prose-custom code {
+  background-color: #F1F5F9;
+  color: #6366F1;
+  padding: 0.12rem 0.3rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+  font-family: monospace;
+}
+
+.dark .prose-custom code {
+  background-color: #334155;
+  color: #A5B4FC;
+}
+
+.prose-custom pre code {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}

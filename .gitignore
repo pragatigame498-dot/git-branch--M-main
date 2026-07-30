@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Virtual Environment
+venv/
+.env
+
+# Database
+*.db
+*.sqlite3
+
+# Chroma Vector Database
+vector_store/
+chroma_db/
+
+# Uploaded Files
+uploads/
+
+# Logs
+*.log
+
+# VS Code
+.vscode/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Operating System
+.DS_Store
+Thumbs.db
