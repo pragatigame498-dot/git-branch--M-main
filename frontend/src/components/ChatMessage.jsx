@@ -48,18 +48,18 @@ function ChatMessage({ message, onCopySuccess, onRegenerate }) {
       )}
 
       {/* Message Bubble Container */}
-      <div className={`group relative max-w-[82%] sm:max-w-[76%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+      <div className={`group relative max-w-[88%] sm:max-w-[82%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
         <div className={`
-          px-5 py-3.5 rounded-2xl transition-all duration-300 font-medium leading-relaxed
+          px-5 py-4 rounded-[22px] transition-all duration-300 font-normal leading-relaxed text-base
           ${isUser 
-            ? 'bg-[#8E72FF] text-white rounded-tr-xs shadow-md shadow-[#8E72FF]/20 hover:shadow-lg hover:shadow-[#8E72FF]/30' 
-            : 'bg-white text-[#111827] border border-slate-200 dark:bg-[#1E293B] dark:text-white dark:border-slate-700/80 rounded-tl-xs shadow-sm hover:border-purple-300 dark:hover:border-purple-500/50 hover:shadow-md'
+            ? 'bg-[#D97706] text-white rounded-tr-xs shadow-md shadow-amber-600/20 hover:shadow-lg hover:shadow-amber-600/30 font-medium' 
+            : 'bg-[#F4F1EA] text-[#2D2926] border border-amber-900/10 dark:bg-[#242421] dark:text-[#ECEAE5] dark:border-white/10 rounded-tl-xs shadow-xs hover:shadow-md'
           }
         `}>
           {isUser ? (
-            <p className="whitespace-pre-wrap text-white font-medium text-sm">{message.text}</p>
+            <p className="whitespace-pre-wrap text-white font-medium text-base leading-relaxed">{message.text}</p>
           ) : (
-            <div className="prose-custom">
+            <div className="prose-custom text-base leading-relaxed">
               <ReactMarkdown 
                 remarkPlugins={[remarkGfm]}
                 components={{

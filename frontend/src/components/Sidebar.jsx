@@ -63,24 +63,24 @@ function Sidebar({
       {/* Sidebar Drawer */}
       <aside className={`
         fixed lg:static inset-y-0 left-0 z-50
-        w-72 bg-white dark:bg-[#1E293B] text-[#111827] dark:text-white border-r border-slate-200 dark:border-slate-700/80
+        w-72 bg-[#FAF7F2] dark:bg-[#1C1C19] text-[#2D2926] dark:text-[#ECEAE5] border-r border-amber-900/10 dark:border-white/10
         flex flex-col h-full transition-all duration-500 ease-in-out
         ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         {/* Header / Logo */}
-        <div className="p-4 border-b border-slate-200 dark:border-slate-700/80 flex items-center justify-between transition-colors duration-500">
+        <div className="p-4 border-b border-amber-900/10 dark:border-white/10 flex items-center justify-between transition-colors duration-500">
           <div className="flex items-center gap-2.5">
             <motion.div 
               whileHover={{ rotate: 15, scale: 1.08 }}
-              className="w-9 h-9 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-purple-600/30"
+              className="w-9 h-9 rounded-full bg-gradient-to-r from-amber-600 to-amber-700 flex items-center justify-center text-white shadow-md shadow-amber-600/20"
             >
               <Bot className="w-5 h-5" />
             </motion.div>
             <div>
-              <h1 className="font-bold text-[#111827] dark:text-white text-sm leading-snug">
-                Chatbot
+              <h1 className="font-bold text-[#2D2926] dark:text-[#ECEAE5] text-sm leading-snug tracking-tight">
+                ASA Bot
               </h1>
-              <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">Memory AI Assistant</p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold">Claude AI Style Assistant</p>
             </div>
           </div>
           <button 
@@ -100,7 +100,7 @@ function Sidebar({
               onNewChat();
               if (isMobileOpen) onCloseMobile();
             }}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-semibold text-sm rounded-2xl transition-all shadow-md shadow-purple-600/25 group cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#D97706] hover:bg-[#B45309] text-white font-semibold text-sm rounded-2xl transition-all shadow-md shadow-amber-600/20 group cursor-pointer"
           >
             <Plus className="w-4 h-4 transition-transform group-hover:rotate-90 duration-200" />
             <span>New Conversation</span>
