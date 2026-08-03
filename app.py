@@ -3,14 +3,15 @@ import glob
 import asyncio
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_community.document_loaders import PyPDFLoader
 
 import database
 import memory
-from rag import ask_rag, clear_rag_cache
+from rag import ask_rag, ask_rag_stream, clear_rag_cache
 from create_db import (
     build_vector_db,
     index_single_pdf,
@@ -159,6 +160,60 @@ async def chat(data: ChatRequest):
         "answer": answer,
         "bot_message_id": bot_msg["id"]
     }
+
+@app.post("/chat/stream")
+async def chat_stream(data: ChatRequest, request: Request):
+    """
+    FastAPI Streaming Response Endpoint for ChatGPT-style Real-Time Token Streaming.
+    """
+    import json
+    if not data.question or not data.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
+    chat_id = data.chat_id
+    if not chat_id:
+        import uuid
+        chat_id = f"chat-{uuid.uuid4().hex[:8]}"
+        title = data.question[:32] + "..." if len(data.question) > 32 else data.question
+        await asyncio.to_thread(database.create_chat, chat_id, title, "default_user")
+
+    # Save user message to SQLite DB
+    await asyncio.to_thread(database.add_message, chat_id, "user", data.question)
+
+    async def event_generator():
+        accumulated_text = ""
+        try:
+            init_payload = json.dumps({"type": "init", "chat_id": chat_id})
+            yield f"data: {init_payload}\n\n"
+
+            async for token in ask_rag_stream(data.question, "default_user", chat_id):
+                if await request.is_disconnected():
+                    print(f"[STREAM CANCELLED] Client disconnected from chat {chat_id}")
+                    break
+                if token:
+                    accumulated_text += token
+                    token_payload = json.dumps({"type": "token", "token": token})
+                    yield f"data: {token_payload}\n\n"
+
+            if accumulated_text:
+                await asyncio.to_thread(database.add_message, chat_id, "bot", accumulated_text)
+
+            end_payload = json.dumps({"type": "done", "chat_id": chat_id, "full_text": accumulated_text})
+            yield f"data: {end_payload}\n\n"
+        except Exception as e:
+            print(f"[STREAM EXCEPTION] {e}")
+            err_payload = json.dumps({"type": "error", "error": str(e)})
+            yield f"data: {err_payload}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "X-Accel-Buffering": "no",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive"
+        }
+    )
 
 # ==============================================================================
 # PDF DOCUMENT MANAGEMENT ENDPOINTS

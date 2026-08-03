@@ -8,12 +8,12 @@ import { motion } from 'framer-motion';
 // ==============================================================================
 
 function AnimatedRobot({ isThinking = false, size = 'md', className = '' }) {
-  // Size presets (sm: 48px, md: 96px, lg: 160px)
+  // Size presets (sm: 44px, md: 76px, lg: 130px)
   const dimensions = {
-    sm: { width: 48, height: 56, viewBox: "0 0 100 120" },
-    md: { width: 110, height: 130, viewBox: "0 0 100 120" },
-    lg: { width: 160, height: 190, viewBox: "0 0 100 120" }
-  }[size] || { width: 110, height: 130, viewBox: "0 0 100 120" };
+    sm: { width: 44, height: 50, viewBox: "0 0 100 120" },
+    md: { width: 76, height: 88, viewBox: "0 0 100 120" },
+    lg: { width: 130, height: 150, viewBox: "0 0 100 120" }
+  }[size] || { width: 44, height: 50, viewBox: "0 0 100 120" };
 
   return (
     <div className={`relative inline-flex flex-col items-center justify-center select-none ${className}`}>

@@ -23,7 +23,7 @@ function TypingIndicator() {
     >
       {/* Interactive AI Robot in Thinking State */}
       <div className="shrink-0 flex items-center justify-center">
-        <AnimatedRobot size="md" isThinking={true} />
+        <AnimatedRobot size="sm" isThinking={true} />
       </div>
 
       {/* Glassmorphism Thinking Bubble */}

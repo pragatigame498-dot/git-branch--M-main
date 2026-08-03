@@ -1,16 +1,17 @@
 import React, { memo } from 'react';
 import { motion } from 'framer-motion';
-import { Menu, Upload, Settings, Sun, Moon, LayoutDashboard, MessageSquare } from 'lucide-react';
+import { Menu, Upload, Settings, Sun, Moon } from 'lucide-react';
 import AnimatedRobot from './AnimatedRobot';
 import { useTheme } from '../context/ThemeContext';
 
 // ==============================================================================
 // PERFORMANCE & ANIMATION OPTIMIZATION:
-// Memoized Navbar with Animated Robot & View Toggle (Chat / Dashboard).
+// Memoized Navbar with Animated Robot.
 // ==============================================================================
 
 function Navbar({
   chatTitle,
+  activeChatId,
   onToggleMobileSidebar,
   onOpenUploadModal,
   onOpenSettings,
@@ -20,7 +21,7 @@ function Navbar({
   const { isDarkMode, toggleTheme } = useTheme();
 
   return (
-    <header className="h-14 macos-glass text-[#1C1C1E] dark:text-white px-5 flex items-center justify-between shrink-0 rounded-t-[26px] z-30 border-b border-black/5 dark:border-white/10 transition-colors duration-500">
+    <header className="h-20 macos-glass text-[#1C1C1E] dark:text-white px-6 flex items-center justify-between shrink-0 rounded-t-[26px] z-30 border-b border-black/5 dark:border-white/10 transition-colors duration-500">
       {/* Left: macOS Traffic Light Controls & Clean 3D Robot Logo */}
       <div className="flex items-center gap-3 min-w-0">
         {/* macOS Traffic Lights (Close 🔴, Minimize 🟡, Expand 🟢) */}
@@ -38,45 +39,29 @@ function Navbar({
           <Menu className="w-4.5 h-4.5" />
         </motion.button>
 
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-10 flex items-center justify-center shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-11 h-14 flex items-center justify-center shrink-0 pt-1">
             <AnimatedRobot size="sm" />
           </div>
 
           <div className="min-w-0">
-            <h2 className="font-bold text-[#1C1C1E] dark:text-white text-sm leading-tight tracking-tight truncate">
-              ASA Bot
+            <h2 className="font-bold text-[#1C1C1E] dark:text-white text-base leading-tight tracking-tight truncate">
+              Nexus AI
             </h2>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate font-medium">
-              {chatTitle || 'PDF Assistant'}
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate font-medium flex items-center gap-1.5">
+              <span>{chatTitle || 'PDF Assistant'}</span>
+              {activeChatId && (
+                <span className="text-[9px] font-mono bg-purple-500/10 text-purple-600 dark:text-purple-400 px-1.5 py-0.2 rounded font-semibold border border-purple-500/20">
+                  {activeChatId}
+                </span>
+              )}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Right: Actions & Dashboard View Toggle */}
+      {/* Right: Actions */}
       <div className="flex items-center gap-2">
-        {onToggleViewMode && (
-          <motion.button
-            whileHover={{ scale: 1.04 }}
-            whileTap={{ scale: 0.96 }}
-            onClick={onToggleViewMode}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-[#1C1C1E] dark:text-white border border-black/5 dark:border-white/10 text-xs font-semibold rounded-full transition-all cursor-pointer shadow-2xs"
-            title={viewMode === 'chat' ? "Switch to Dashboard Analytics 📊" : "Switch to Chat View 💬"}
-          >
-            {viewMode === 'chat' ? (
-              <>
-                <LayoutDashboard className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                <span className="hidden sm:inline">Dashboard</span>
-              </>
-            ) : (
-              <>
-                <MessageSquare className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                <span className="hidden sm:inline">Chat</span>
-              </>
-            )}
-          </motion.button>
-        )}
 
         <motion.button
           whileHover={{ scale: 1.04 }}

@@ -46,23 +46,11 @@ export default function App() {
     try {
       const res = await axios.get(`${API_BASE_URL}/api/chats`);
       const backendChats = res.data.chats || [];
-      
-      if (backendChats.length > 0) {
-        setChats(backendChats);
-        if (!activeChatId) {
-          setActiveChatId(backendChats[0].id);
-        }
-      } else {
-        // Create initial default chat if database is empty
-        const createRes = await axios.post(`${API_BASE_URL}/api/chats`, { title: 'Pragati Game Resume' });
-        const newChat = createRes.data.chat;
-        setChats([newChat]);
-        setActiveChatId(newChat.id);
-      }
+      setChats(backendChats);
     } catch (err) {
       console.error("Failed to load chats from backend database:", err);
     }
-  }, [API_BASE_URL, activeChatId]);
+  }, [API_BASE_URL]);
 
   // ----------------------------------------------------------------------------
   // 2. FETCH MESSAGES FOR ACTIVE CHAT
@@ -97,6 +85,8 @@ export default function App() {
   useEffect(() => {
     if (activeChatId) {
       fetchActiveMessages(activeChatId);
+    } else {
+      setActiveMessages([]);
     }
   }, [activeChatId, fetchActiveMessages]);
 
@@ -113,49 +103,39 @@ export default function App() {
   // CHAT CRUD HANDLERS
   // ----------------------------------------------------------------------------
 
-  const handleNewChat = useCallback(async () => {
-    try {
-      const res = await axios.post(`${API_BASE_URL}/api/chats`, { title: 'New Conversation' });
-      const newChat = res.data.chat;
-      setChats(prev => [newChat, ...prev]);
-      setActiveChatId(newChat.id);
-      setActiveMessages([]);
-    } catch (err) {
-      console.error("Failed to create new chat:", err);
-    }
-  }, [API_BASE_URL]);
+  const handleNewChat = useCallback(() => {
+    setActiveChatId(null);
+    setActiveMessages([]);
+  }, []);
 
   const handleDeleteChat = useCallback(async (chatId) => {
     try {
       await axios.delete(`${API_BASE_URL}/api/chats/${chatId}`);
-      setChats(prev => {
-        const updated = prev.filter((c) => c.id !== chatId);
-        if (activeChatId === chatId) {
-          if (updated.length > 0) {
-            setActiveChatId(updated[0].id);
-          } else {
-            handleNewChat();
-          }
-        }
-        return updated;
-      });
+      setChats(prev => prev.filter((c) => c.id !== chatId));
+      if (activeChatId === chatId) {
+        setActiveChatId(null);
+        setActiveMessages([]);
+      }
       showToast("Conversation deleted from database", "info");
     } catch (err) {
       console.error("Failed to delete chat:", err);
     }
-  }, [API_BASE_URL, activeChatId, showToast, handleNewChat]);
+  }, [API_BASE_URL, activeChatId, showToast]);
 
   const handleClearAllChats = useCallback(async () => {
+    const confirmed = window.confirm("Are you sure you want to clear all conversation history?");
+    if (!confirmed) return;
     try {
       await axios.delete(`${API_BASE_URL}/api/chats`);
       setChats([]);
+      setActiveChatId(null);
       setActiveMessages([]);
-      handleNewChat();
-      showToast("All chat history cleared", "info");
+      showToast("All chat history cleared successfully", "info");
     } catch (err) {
       console.error("Failed to clear chats:", err);
+      showToast("Failed to clear chat history", "error");
     }
-  }, [API_BASE_URL, handleNewChat, showToast]);
+  }, [API_BASE_URL, showToast]);
 
   const handlePdfUploaded = useCallback((data) => {
     fetchPdfs();
@@ -190,7 +170,7 @@ export default function App() {
 
     let targetChatId = activeChatId;
     if (!targetChatId) {
-      const createRes = await axios.post(`${API_BASE_URL}/api/chats`, { title: text.substring(0, 24) });
+      const createRes = await axios.post(`${API_BASE_URL}/api/chats`, { title: text.substring(0, 32) });
       targetChatId = createRes.data.chat.id;
       setActiveChatId(targetChatId);
     }
@@ -201,30 +181,109 @@ export default function App() {
       text: text
     };
 
-    // Synchronously render user message & typing indicator
+    // Show Thinking indicator while waiting for response
     setIsLoading(true);
     setActiveMessages(prev => [...prev, userMessage]);
 
+    const botMessageId = `msg-bot-${Date.now()}`;
+    let isFirstToken = true;
+    let accumulatedText = "";
+    let animationFrameId = null;
+    let isFinished = false;
+
+    const flushToState = () => {
+      if (isFirstToken && accumulatedText.length > 0) {
+        setIsLoading(false);
+        isFirstToken = false;
+        setActiveMessages(prev => [
+          ...prev,
+          {
+            id: botMessageId,
+            sender: 'bot',
+            text: accumulatedText,
+            isStreaming: !isFinished
+          }
+        ]);
+      } else if (!isFirstToken) {
+        setActiveMessages(prev =>
+          prev.map(msg =>
+            msg.id === botMessageId
+              ? { ...msg, text: accumulatedText, isStreaming: !isFinished }
+              : msg
+          )
+        );
+      }
+    };
+
     try {
-      const response = await axios.post(`${API_BASE_URL}/chat`, {
-        question: text,
-        chat_id: targetChatId
+      const response = await fetch(`${API_BASE_URL}/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: text, chat_id: targetChatId })
       });
 
-      const botMessage = {
-        id: response.data.bot_message_id || `msg-bot-${Date.now()}`,
-        sender: 'bot',
-        text: response.data.answer || "No response received from RAG backend."
-      };
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-      setActiveMessages(prev => [...prev, botMessage]);
-      fetchChats(); // Refresh chat list order in sidebar
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('data: ')) {
+            const rawData = trimmed.slice(6);
+            try {
+              const payload = JSON.parse(rawData);
+
+              if (payload.type === 'init') {
+                if (payload.chat_id) {
+                  targetChatId = payload.chat_id;
+                  setActiveChatId(payload.chat_id);
+                }
+              } else if (payload.type === 'token') {
+                accumulatedText += payload.token;
+
+                if (isFirstToken) {
+                  flushToState();
+                } else if (!animationFrameId) {
+                  animationFrameId = requestAnimationFrame(() => {
+                    animationFrameId = null;
+                    flushToState();
+                  });
+                }
+              } else if (payload.type === 'done') {
+                isFinished = true;
+                if (payload.full_text) accumulatedText = payload.full_text;
+                flushToState();
+                fetchChats();
+              }
+            } catch (e) {
+              console.error("Error parsing stream chunk:", e);
+            }
+          }
+        }
+      }
+
+      isFinished = true;
+      if (accumulatedText) flushToState();
+      fetchChats();
     } catch (error) {
-      console.error("Backend Error:", error);
+      console.error("Streaming Backend Error:", error);
+      setIsLoading(false);
       const errorMessage = {
         id: `msg-err-${Date.now()}`,
         sender: 'bot',
-        text: `### ⚠️ Connection Error\n\nCould not connect to FastAPI backend at \`${API_BASE_URL}/chat\`. Please make sure Uvicorn backend is running on port 8000.`
+        text: `### ⚠️ Connection Error\n\nCould not connect to FastAPI backend at \`${API_BASE_URL}/chat/stream\`. Please make sure Uvicorn backend is running.`
       };
       setActiveMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -241,8 +300,10 @@ export default function App() {
   }, [activeMessages, isLoading, handleSendMessage]);
 
   const handleSelectChat = useCallback((id) => {
+    if (id === activeChatId) return;
+    setActiveMessages([]);
     setActiveChatId(id);
-  }, []);
+  }, [activeChatId]);
 
   const handleOpenSettings = useCallback(() => setIsSettingsModalOpen(true), []);
   const handleCloseSettings = useCallback(() => setIsSettingsModalOpen(false), []);
@@ -304,6 +365,7 @@ export default function App() {
               {/* Header */}
           <Navbar
             chatTitle={activeChat?.title}
+            activeChatId={activeChatId}
             onToggleMobileSidebar={handleToggleMobile}
             onOpenUploadModal={handleOpenUpload}
             onOpenSettings={handleOpenSettings}

@@ -67,14 +67,14 @@ function SuggestionCards({ onSelectCard, onOpenUploadModal }) {
         variants={itemVariants}
         className="text-2xl font-extrabold text-[#111827] dark:text-white tracking-tight transition-colors duration-300"
       >
-        ASA Bot JavaScript Intelligence
+        Nexus AI Intelligence
       </motion.h2>
 
       <motion.p 
         variants={itemVariants}
         className="text-sm text-purple-600 dark:text-purple-400 max-w-md mt-1 mb-8 font-semibold transition-colors duration-300"
       >
-        प्रश्न टाइप करा किंवा खालीलपैकी एका कार्डवर क्लिक करा.
+        Type a question or select a prompt card below to get started.
       </motion.p>
 
       {/* Suggestion Grid */}

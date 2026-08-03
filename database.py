@@ -116,6 +116,7 @@ def get_all_chats(user_id: str = "default_user") -> List[Dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute("""
         SELECT c.id, c.title, c.created_at, c.updated_at,
+               (SELECT content FROM messages WHERE chat_id = c.id AND (role = 'user' OR role = 'human') ORDER BY timestamp ASC LIMIT 1) as first_user_query,
                (SELECT content FROM messages WHERE chat_id = c.id ORDER BY timestamp DESC LIMIT 1) as last_message
         FROM chats c
         WHERE c.user_id = ?
@@ -125,12 +126,22 @@ def get_all_chats(user_id: str = "default_user") -> List[Dict[str, Any]]:
         
         chats = []
         for r in rows:
+            raw_title = r["title"] or ""
+            first_q = r["first_user_query"] or ""
+            last_m = r["last_message"] or ""
+
+            if raw_title in ("", "New Conversation") and first_q:
+                display_title = first_q[:32] + "..." if len(first_q) > 32 else first_q
+            else:
+                display_title = raw_title or "New Conversation"
+
             chats.append({
                 "id": r["id"],
-                "title": r["title"],
+                "title": display_title,
                 "created_at": r["created_at"],
                 "updated_at": r["updated_at"],
-                "last_message": r["last_message"] or ""
+                "last_message": last_m,
+                "first_user_query": first_q
             })
         return chats
     finally:
@@ -141,7 +152,7 @@ def get_chat_messages(chat_id: str) -> List[Dict[str, Any]]:
     try:
         cursor = conn.cursor()
         cursor.execute("""
-        SELECT id, role as sender, content as text, timestamp
+        SELECT id, role as sender, content, timestamp
         FROM messages
         WHERE chat_id = ?
         ORDER BY timestamp ASC;
@@ -173,13 +184,18 @@ def add_message(chat_id: str, sender: str, text: str, msg_id: Optional[str] = No
         cursor.execute("SELECT id, title FROM chats WHERE id = ?;", (chat_id,))
         chat_row = cursor.fetchone()
         if not chat_row:
-            title = text[:24] + "..." if len(text) > 24 else text
+            title = text[:32] + "..." if len(text) > 32 else text
             cursor.execute(
                 "INSERT INTO chats (id, user_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?);",
                 (chat_id, "default_user", title, now, now)
             )
         else:
-            cursor.execute("UPDATE chats SET updated_at = ? WHERE id = ?;", (now, chat_id))
+            existing_title = chat_row["title"]
+            if (existing_title in ("New Conversation", "", None)) and sender == "user":
+                new_title = text[:32] + "..." if len(text) > 32 else text
+                cursor.execute("UPDATE chats SET title = ?, updated_at = ? WHERE id = ?;", (new_title, now, chat_id))
+            else:
+                cursor.execute("UPDATE chats SET updated_at = ? WHERE id = ?;", (now, chat_id))
 
         role = "user" if sender == "user" else "assistant"
         cursor.execute(

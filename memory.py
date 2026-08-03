@@ -10,7 +10,7 @@ import database
 
 PATTERNS = [
     # Name
-    (r"(?:my name is|i am|call me|majhe nav|majh nav|name is)\s+([a-zA-Z\s\.]{1,30})", "Name"),
+    (r"(?:my name is|your name is|i am|you are|call me|call yourself|majhe nav|majh nav|tujhe nav|tuze nav|tumche nav|name is)\s+([a-zA-Z\s\.]{1,30})", "Name"),
     # City / Location
     (r"(?:i live in|i am from|my city is|location is|mi\s+([A-Za-z]+)\s+madhye|living in)\s+([a-zA-Z\s]{2,25})", "City"),
     # College / Education
@@ -30,6 +30,7 @@ def extract_and_save_memories(text: str, user_id: str = "default_user") -> Dict[
     Extracts personal facts from user message and persists them in SQLite database.
     """
     extracted = {}
+    text_lower = text.lower().strip()
     
     # Direct regex pattern matching for fast extraction
     for pattern, category in PATTERNS:
@@ -45,18 +46,20 @@ def extract_and_save_memories(text: str, user_id: str = "default_user") -> Dict[
                 database.save_user_memory(category, fact_value, user_id)
                 extracted[category] = fact_value
 
-    # Direct conversational fallback heuristics
-    text_lower = text.lower().strip()
-    if "my name is" in text_lower:
-        name_val = text_lower.split("my name is")[-1].strip().title()
-        name_val = name_val.split(".")[0].split(",")[0]
-        if name_val:
-            database.save_user_memory("Name", name_val, user_id)
-            extracted["Name"] = name_val
+    # Direct conversational fallback heuristics for name
+    name_phrases = ["your name is", "my name is", "call me", "call yourself", "name is", "tujhe nav", "tuze nav", "majhe nav", "majh nav"]
+    for phrase in name_phrases:
+        if phrase in text_lower and "Name" not in extracted:
+            name_val = text_lower.split(phrase)[-1].strip().title()
+            name_val = re.sub(r"[.,!?].*", "", name_val).strip()
+            if name_val and len(name_val) >= 2:
+                database.save_user_memory("Name", name_val, user_id)
+                extracted["Name"] = name_val
+                break
 
-    if "i live in" in text_lower:
+    if "i live in" in text_lower and "City" not in extracted:
         city_val = text_lower.split("i live in")[-1].strip().title()
-        city_val = city_val.split(".")[0].split(",")[0]
+        city_val = re.sub(r"[.,!?].*", "", city_val).strip()
         if city_val:
             database.save_user_memory("City", city_val, user_id)
             extracted["City"] = city_val
@@ -71,7 +74,7 @@ def get_memory_context(user_id: str = "default_user") -> str:
     if not memories:
         return ""
 
-    lines = ["========================", "USER AI MEMORY (PERSONAL FACTS)", "========================"]
+    lines = ["========================", "USER & AI MEMORY (SAVED FACTS)", "========================"]
     for category, fact in memories.items():
         lines.append(f"- {category}: {fact}")
     return "\n".join(lines) + "\n\n"

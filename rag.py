@@ -1,6 +1,7 @@
 import os
 import re
 import functools
+import asyncio
 from typing import Dict, List, Tuple, Optional, Set, Any
 from dotenv import load_dotenv
 import ollama
@@ -11,7 +12,7 @@ from memory import extract_and_save_memories, get_memory_context
 load_dotenv()
 
 # ==============================================================================
-# DEDICATED JAVASCRIPT RAG AI ASSISTANT PIPELINE WITH MULTI-TURN MEMORY
+# DEDICATED JAVASCRIPT RAG AI ASSISTANT PIPELINE WITH HIGH-PERFORMANCE CACHING
 # ==============================================================================
 
 _GEMINI_CLIENT = None
@@ -25,7 +26,8 @@ except Exception as e:
     print(f"[WARNING] Cloud LLM init skipped: {e}")
 
 RESPONSE_CACHE: Dict[str, str] = {}
-CACHE_MAX_SIZE = 200
+RETRIEVAL_CACHE: Dict[str, Tuple[List[str], List[str]]] = {}
+CACHE_MAX_SIZE = 500
 
 DISTANCE_THRESHOLD = 1.0
 FALLBACK_NO_JS_DATA = "I don't know based on the provided JavaScript document."
@@ -61,6 +63,16 @@ NON_JS_TOPICS = [
     "database", "networking", "machine learning", "ai", "operating system"
 ]
 
+OLLAMA_FAST_OPTIONS = {
+    "keep_alive": "1h",
+    "num_ctx": 1500,
+    "num_predict": 350,
+    "num_thread": 8,
+    "temperature": 0.2,
+    "top_k": 10,
+    "top_p": 0.8
+}
+
 def fix_typos(text: str) -> str:
     words = text.split()
     fixed = [TYPO_MAP.get(w.lower(), w) for w in words]
@@ -81,9 +93,8 @@ def is_non_js_topic_query(text: str) -> bool:
 
 def resolve_followup_question(question: str, chat_id: Optional[str]) -> Tuple[str, str]:
     """
-    Priority 2: Context-Aware Follow-up Resolution.
-    Uses chat history to understand pronouns ('its', 'it') and short follow-ups
-    ('types', 'syntax', 'methods', 'examples', 'full form').
+    Context-Aware Follow-up Resolution.
+    Uses chat history to understand pronouns ('its', 'it') and short follow-ups.
     Returns (resolved_search_query, history_context_str).
     """
     history_lines = []
@@ -92,29 +103,23 @@ def resolve_followup_question(question: str, chat_id: Optional[str]) -> Tuple[st
     if chat_id:
         try:
             messages = database.get_chat_messages(chat_id)
-            # Take last 6 messages
             recent_msgs = messages[-6:] if len(messages) > 6 else messages
             for msg in recent_msgs:
                 role = "User" if msg.get("sender") == "user" else "Assistant"
-                content = msg.get("content", "").strip()
-                # Truncate long assistant messages
-                if len(content) > 120:
-                    content_disp = content[:120] + "..."
-                else:
-                    content_disp = content
+                content = msg.get("text", msg.get("content", "")).strip()
+                content_disp = content[:150] + "..." if len(content) > 150 else content
                 history_lines.append(f"{role}: {content_disp}")
                 if msg.get("sender") == "user":
-                    user_txt = msg.get("content", "").strip()
+                    user_txt = content
                     if len(user_txt.split()) <= 6 and not any(w in user_txt.lower() for w in ["types", "syntax", "methods", "its", "it", "ok", "hi"]):
                         last_topic = user_txt
-                    elif "javascript" in user_txt.lower() or "variable" in user_txt.lower() or "function" in user_txt.lower() or "array" in user_txt.lower():
+                    elif any(k in user_txt.lower() for k in ["javascript", "variable", "function", "array", "promise"]):
                         last_topic = user_txt
         except Exception as e:
             print(f"[HISTORY WARNING] Could not fetch chat messages: {e}")
 
-    history_str = "\n".join(history_lines) if history_lines else "No previous conversation history."
+    history_str = "\n".join(history_lines) if history_lines else "No previous history in this session."
     
-    # Check if current question is a follow-up
     q_lower = question.lower().strip()
     words = q_lower.split()
     
@@ -125,27 +130,19 @@ def resolve_followup_question(question: str, chat_id: Optional[str]) -> Tuple[st
 
     resolved_q = question
     if is_short_followup and last_topic:
-        # Clean last topic from question marks
         clean_topic = last_topic.rstrip("?.,! ")
         if "javascript" not in clean_topic.lower() and "js" not in clean_topic.lower():
             clean_topic = f"JavaScript {clean_topic}"
         resolved_q = f"{clean_topic} {question}"
-        print(f"[RESOLVED FOLLOW-UP] Question '{question}' resolved to: '{resolved_q}' using topic: '{clean_topic}'")
 
     return resolved_q, history_str
 
 def expand_query(text: str) -> str:
     cleaned = fix_typos(text.lower().strip())
-    
     fluff_patterns = [
-        r"^what (?:is|are) ",
-        r"^explain ",
-        r"^tell me about ",
-        r"^definition of ",
-        r"^how to use ",
-        r"^types of ",
-        r"^advantages of ",
-        r"^examples? of "
+        r"^what (?:is|are) ", r"^explain ", r"^tell me about ",
+        r"^definition of ", r"^how to use ", r"^types of ",
+        r"^advantages of ", r"^examples? of "
     ]
     core_term = cleaned
     for p in fluff_patterns:
@@ -164,9 +161,10 @@ def expand_query(text: str) -> str:
     return full_expanded
 
 def clear_rag_cache() -> None:
-    global RESPONSE_CACHE
+    global RESPONSE_CACHE, RETRIEVAL_CACHE
     RESPONSE_CACHE.clear()
-    print("[CACHE] RAG Response Cache cleared due to index update.")
+    RETRIEVAL_CACHE.clear()
+    print("[CACHE] RAG Caches cleared due to index update.")
 
 def clean_and_rerank_chunks(
     results: List[Tuple[Any, float]], 
@@ -177,7 +175,6 @@ def clean_and_rerank_chunks(
         return [], []
 
     query_words = set(re.findall(r"\w+", query.lower()))
-
     scored_chunks = []
     seen_texts = set()
 
@@ -189,7 +186,7 @@ def clean_and_rerank_chunks(
         if not text:
             continue
 
-        text_signature = text[:150].lower()
+        text_signature = text[:120].lower()
         if text_signature in seen_texts:
             continue
         seen_texts.add(text_signature)
@@ -214,243 +211,340 @@ def clean_and_rerank_chunks(
             if clean_m and len(clean_m) > 3 and clean_m not in extracted_headings:
                 extracted_headings.append(clean_m)
 
-    return top_chunks, extracted_headings[:5]
+    return top_chunks, extracted_headings[:4]
+
+def get_retrieved_chunks(cleaned_question: str, top_n: int = 3) -> Tuple[List[str], List[str]]:
+    if cleaned_question in RETRIEVAL_CACHE:
+        return RETRIEVAL_CACHE[cleaned_question]
+    
+    db = get_global_vector_db()
+    pass1_results = []
+    try:
+        pass1_results = db.similarity_search_with_score(cleaned_question, k=4)
+    except Exception as e:
+        print(f"[PASS 1 ERROR] {e}")
+
+    top_chunks, headings = clean_and_rerank_chunks(pass1_results, cleaned_question, top_n=top_n)
+    if not top_chunks:
+        expanded_q = expand_query(cleaned_question)
+        try:
+            pass2_results = db.similarity_search_with_score(expanded_q, k=4)
+            top_chunks, headings = clean_and_rerank_chunks(pass2_results, expanded_q, top_n=top_n)
+        except Exception as e:
+            print(f"[PASS 2 ERROR] {e}")
+
+    if len(RETRIEVAL_CACHE) >= CACHE_MAX_SIZE:
+        RETRIEVAL_CACHE.clear()
+
+    RETRIEVAL_CACHE[cleaned_question] = (top_chunks, headings)
+    return top_chunks, headings
 
 def ask_rag(question: str, user_id: str = "default_user", chat_id: Optional[str] = None) -> str:
-    """
-    INTELLIGENT JAVASCRIPT RAG AI ASSISTANT WITH MULTI-TURN CONVERSATION MEMORY:
-    - Resolves pronouns ('its') and follow-ups ('Types?', 'Syntax', 'Methods') from chat history.
-    - Formats output cleanly with # Topic, ## Definition, ## Explanation, ## Types, ## Features, ## Syntax.
-    """
+    global _GEMINI_CLIENT
     normalized_q = question.strip().lower()
 
-    # Rule 8 & 13: Non-JS Topic Filter
     if is_non_js_topic_query(question):
         return FALLBACK_NON_JS_TOPIC
 
-    # Step 1: Extract & Save Memories
     extracted_memories = extract_and_save_memories(question, user_id)
-    memory_context = get_memory_context(user_id)
-
     if extracted_memories:
         if "Name" in extracted_memories:
             name = extracted_memories["Name"]
-            return f"Hello **{name}**! Nice to meet you. I have saved your details in my memory."
+            return f"Hello! Details saved. I will remember that the name is **{name}**."
         else:
             facts_str = ", ".join([f"**{k}**: {v}" for k, v in extracted_memories.items()])
-            return f"Got it! I have saved {facts_str} in my memory. I will remember this across our conversations."
+            return f"Got it! I have saved {facts_str} in my memory."
 
-    # Step 2: Handle Personal Memory Questions
     is_name_q = any(p in normalized_q for p in [
         "what is my name", "what's my name", "what is your name", "what's your name",
-        "who am i", "who i am", "tell me my name", "do you know my name"
-    ]) or (normalized_q in ["my name", "your name"])
+        "what is your self name", "what is your self-name", "what's your self name",
+        "who am i", "who i am", "who are you", "who r u", "tell me my name", "tell me your name",
+        "do you know my name", "do you know your name", "what is name", "self name",
+        "tuze nav", "tujhe nav", "tumche nav", "majhe nav", "majh nav", "nav kay"
+    ]) or ("name" in normalized_q and any(w in normalized_q for w in ["what", "who", "tell", "know", "your", "my", "self"]))
 
     is_location_q = any(p in normalized_q for p in [
         "where do i live", "what is my city", "where am i from", "my location", "where i live"
     ])
 
-    is_general_mem_q = any(p in normalized_q for p in [
-        "what do you know about me", "my profile", "my details", "my memories"
-    ])
-
-    if is_name_q or is_location_q or is_general_mem_q:
+    if is_name_q or is_location_q:
         all_memories = database.get_all_user_memories(user_id)
-
         if is_name_q:
-            if "Name" in all_memories:
-                return f"Your name is **{all_memories['Name']}**!"
-            else:
-                return "I am **ASA Bot**, your JavaScript AI Assistant! You haven't told me your name yet. What is your name?"
+            saved_name = all_memories.get("Name")
+            if not saved_name and chat_id:
+                try:
+                    msgs = database.get_chat_messages(chat_id)
+                    for m in msgs:
+                        txt = m.get("text", "").lower()
+                        if "name is" in txt:
+                            for p in ["your name is", "my name is", "name is"]:
+                                if p in txt:
+                                    extracted = txt.split(p)[-1].strip().split(".")[0].split(",")[0].title()
+                                    if extracted:
+                                        saved_name = extracted
+                                        database.save_user_memory("Name", saved_name, user_id)
+                                        break
+                        if saved_name:
+                            break
+                except Exception:
+                    pass
 
+            if saved_name:
+                return f"My name is **{saved_name}**!"
+            return "I am **ASA Bot**, your AI Assistant! What is your name?"
         if is_location_q:
             if "City" in all_memories:
                 return f"You live in **{all_memories['City']}**."
-            else:
-                return "I don't have your location saved yet. Please tell me where you live!"
+            return "I don't have your location saved yet. Where do you live?"
 
-        if all_memories:
-            memory_list = "\n".join([f"* **{k}**: {v}" for k, v in all_memories.items()])
-            return f"Here is what I remember about you:\n\n{memory_list}"
-        else:
-            return "I am **ASA Bot**, your JavaScript AI Assistant!"
-
-    # Step 2.5: Conversational Intents
     clean_q = normalized_q.rstrip(".,! ")
-
-    if clean_q in ["ok", "okay", "k", "sure", "got it", "cool", "great", "awesome", "alright", "fine", "ok thanks", "ok thank you"]:
-        return "Great! How can I help you further with your JavaScript document?"
-
-    if any(clean_q.startswith(p) or clean_q == p for p in ["thanks", "thank you", "thx", "thank u", "dhanyawad", "thank you so much"]):
-        return "You're welcome! Feel free to ask any more JavaScript questions whenever you need help."
-
-    if clean_q in ["hi", "hello", "hey", "good morning", "good evening", "good afternoon", "namaskar", "namaste", "hi there", "hello bot"]:
-        return "Hello! How can I assist you with your JavaScript document today?"
-
-    if clean_q in ["bye", "goodbye", "see you", "good night", "ta ta"]:
+    if clean_q in ["ok", "okay", "k", "sure", "got it", "cool", "great", "alright"]:
+        return "Great! How can I help you further?"
+    if any(clean_q.startswith(p) for p in ["thanks", "thank you", "thx"]):
+        return "You're welcome! Feel free to ask any more questions."
+    if clean_q in ["hi", "hello", "hey"]:
+        return "Hello! How can I assist you today?"
+    if clean_q in ["bye", "goodbye"]:
         return "Goodbye! Have a great day ahead!"
 
-    # --------------------------------------------------------------------------
-    # STEP 3: CONTEXT-AWARE FOLLOW-UP RESOLUTION USING CHAT HISTORY
-    # --------------------------------------------------------------------------
     resolved_search_query, history_str = resolve_followup_question(question, chat_id)
-
-    # In-memory cache check (key includes resolved search query for consistency)
     cache_key = f"{user_id}:{resolved_search_query.strip().lower()}"
     if cache_key in RESPONSE_CACHE:
-        print(f"[CACHE HIT] Instant response for: '{question}'")
         return RESPONSE_CACHE[cache_key]
 
-    # --------------------------------------------------------------------------
-    # STEP 4: PASS 1 & PASS 2 VECTOR DB RETRIEVAL
-    # --------------------------------------------------------------------------
-    db = get_global_vector_db()
     cleaned_question = fix_typos(resolved_search_query)
+    top_chunks, headings = get_retrieved_chunks(cleaned_question, top_n=3)
+    memory_ctx = get_memory_context(user_id)
 
-    pass1_results = []
-    try:
-        pass1_results = db.similarity_search_with_score(cleaned_question, k=8)
-    except Exception as e:
-        print(f"[PASS 1 ERROR] Vector search failed: {e}")
+    doc_context = "\n\n---\n\n".join(top_chunks) if top_chunks else "No specific document context found."
+    if len(doc_context) > 1200:
+        doc_context = doc_context[:1200] + "..."
 
-    top_chunks, headings = clean_and_rerank_chunks(pass1_results, cleaned_question, top_n=3)
+    prompt = f"""You are a helpful and intelligent AI Assistant.
 
-    if not top_chunks:
-        expanded_q = expand_query(cleaned_question)
-        print(f"[PASS 2 FALLBACK] Searching with expanded query: '{expanded_q}'")
-        try:
-            pass2_results = db.similarity_search_with_score(expanded_q, k=8)
-            top_chunks, headings = clean_and_rerank_chunks(pass2_results, expanded_q, top_n=3)
-        except Exception as e:
-            print(f"[PASS 2 ERROR] Expanded search failed: {e}")
+{memory_ctx}
 
-    if not top_chunks:
-        print(f"[OUT OF BOUNDS] Both Pass 1 and Pass 2 searches failed for: '{question}'")
-        RESPONSE_CACHE[cache_key] = FALLBACK_NO_JS_DATA
-        return FALLBACK_NO_JS_DATA
-
-    doc_context = "\n\n---\n\n".join(top_chunks)
-    if len(doc_context) > 2000:
-        doc_context = doc_context[:2000] + "..."
-
-    # --------------------------------------------------------------------------
-    # STEP 5: STRUCTURED SYSTEM PROMPT FOR GENERATION
-    # --------------------------------------------------------------------------
-    prompt = f"""You are an Intelligent JavaScript RAG AI Assistant with Conversation Memory.
-
-========================
-PRIORITY & RULES
-========================
-1. Priority 1: Current question.
-2. Priority 2: Use conversation history to resolve pronouns ("its", "it") and short follow-ups ("Types?", "Syntax", "Methods").
-3. Priority 3: Source of truth is the uploaded JavaScript document context.
-4. If the answer cannot be found in the document, reply EXACTLY:
-I don't know based on the provided JavaScript document.
-
-========================
-OUTPUT FORMAT (If answer exists in context)
-========================
-# [Topic Name]
-
-## Definition
-...
-
-## Explanation
-...
-
-## Types (if available in document)
-...
-
-## Features (if available in document)
-...
-
-## Syntax (if available in document)
-```javascript
-...
-```
-
-Highlight key terms using **bold**. Never answer in one line for valid topics.
-
-========================
-PREVIOUS CONVERSATION HISTORY
-========================
+RECENT CONVERSATION HISTORY:
 {history_str}
 
-========================
-DOCUMENT CONTEXT
-========================
+DOCUMENT CONTEXT (from uploaded files):
 {doc_context}
 
-========================
-CURRENT USER QUESTION
-========================
-{question}
+USER QUESTION: {question}
 
-========================
-ANSWER
-========================
-"""
+INSTRUCTIONS:
+1. If the question asks about identity, user/bot names, or previous conversation history, use the RECENT CONVERSATION HISTORY and USER/AI MEMORY to answer directly.
+2. If the question asks about technical subjects or document content, use the DOCUMENT CONTEXT.
+3. Structure your response professionally in Markdown format."""
 
     answer = None
-
-    # --------------------------------------------------------------------------
-    # STEP 6: FAST LLM GENERATION (GEMINI / LOCAL OLLAMA)
-    # --------------------------------------------------------------------------
     if _GEMINI_CLIENT is not None:
-        for cloud_model in ["gemini-2.0-flash", "gemini-2.0-flash-lite"]:
-            try:
-                print(f"[CLOUD LLM] Generating structured answer using ({cloud_model})...")
-                response = _GEMINI_CLIENT.models.generate_content(
-                    model=cloud_model,
-                    contents=prompt,
-                    config={
-                        "max_output_tokens": 300,
-                        "temperature": 0.2,
-                    }
-                )
-                if response and response.text:
-                    answer = response.text.strip()
-                    break
-            except Exception as err:
-                print(f"[CLOUD LLM FALLBACK] {cloud_model} error: {err}")
+        try:
+            response = _GEMINI_CLIENT.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt,
+                config={"max_output_tokens": 300, "temperature": 0.2}
+            )
+            if response and response.text:
+                answer = response.text.strip()
+        except Exception as err:
+            if "429" in str(err) or "RESOURCE_EXHAUSTED" in str(err):
+                _GEMINI_CLIENT = None
+                print("[CLOUD LLM EXHAUSTED] Disabling Cloud API to ensure instant local response.")
 
     if not answer:
         try:
-            print("[LOCAL OLLAMA] Generating fast structured answer using Local Model...")
-            fast_context = doc_context[:900] + "..." if len(doc_context) > 900 else doc_context
-            fast_prompt = f"""Answer ONLY using provided context.
-CONTEXT:
-{fast_context}
-
-QUESTION:
-{question}
-
-ANSWER IN MARKDOWN WITH HEADINGS (# Topic, ## Definition, ## Explanation):"""
             response = ollama.chat(
                 model="gemma3:4b",
-                messages=[{"role": "user", "content": fast_prompt}],
-                options={
-                    "num_predict": 100,
-                    "num_ctx": 384,
-                    "num_thread": 8,
-                    "temperature": 0.1,
-                    "top_k": 10,
-                    "top_p": 0.8
-                }
+                messages=[{"role": "user", "content": prompt}],
+                options=OLLAMA_FAST_OPTIONS
             )
             answer = response["message"]["content"].strip()
-        except Exception as e:
-            print(f"[LLM ERROR] Ollama chat call failed: {e}")
-            answer = FALLBACK_NO_JS_DATA
+        except Exception:
+            pass
 
-    if not answer or "don't know based on the provided" in answer.lower() or "only answers questions from the uploaded javascript" in answer.lower():
+    if not answer and top_chunks:
+        topic_title = headings[0] if headings else question.title()
+        main_text = top_chunks[0]
+        answer = f"# {topic_title}\n\n## Definition & Details\n{main_text}"
+
+    if not answer:
         RESPONSE_CACHE[cache_key] = FALLBACK_NO_JS_DATA
         return FALLBACK_NO_JS_DATA
 
-    if headings and len(headings) >= 2:
-        related_block = "\n\n---\n### 📌 Related Topics\n" + "\n".join([f"* **{h}**" for h in headings[:4]])
-        if "### 📌 Related Topics" not in answer:
-            answer += related_block
+    if len(RESPONSE_CACHE) >= CACHE_MAX_SIZE:
+        RESPONSE_CACHE.clear()
 
     RESPONSE_CACHE[cache_key] = answer
     return answer
+
+async def ask_rag_stream(question: str, user_id: str = "default_user", chat_id: Optional[str] = None):
+    """
+    Async Generator for zero-delay token streaming.
+    Utilizes Ollama model retention (keep_alive), reduced context, and instant yielding.
+    """
+    global _GEMINI_CLIENT
+    if is_non_js_topic_query(question):
+        yield FALLBACK_NON_JS_TOPIC
+        return
+
+    extracted_memories = extract_and_save_memories(question, user_id)
+    if extracted_memories:
+        if "Name" in extracted_memories:
+            yield f"Hello! Details saved. I will remember that the name is **{extracted_memories['Name']}**."
+        else:
+            yield "Got it! Saved to memory."
+        return
+
+    normalized_q = question.strip().lower()
+
+    is_name_q = any(p in normalized_q for p in [
+        "what is my name", "what's my name", "what is your name", "what's your name",
+        "what is your self name", "what is your self-name", "what's your self name",
+        "who am i", "who i am", "who are you", "who r u", "tell me my name", "tell me your name",
+        "do you know my name", "do you know your name", "what is name", "self name",
+        "tuze nav", "tujhe nav", "tumche nav", "majhe nav", "majh nav", "nav kay"
+    ]) or ("name" in normalized_q and any(w in normalized_q for w in ["what", "who", "tell", "know", "your", "my", "self"]))
+
+    is_location_q = any(p in normalized_q for p in [
+        "where do i live", "what is my city", "where am i from", "my location", "where i live"
+    ])
+
+    if is_name_q or is_location_q:
+        all_memories = database.get_all_user_memories(user_id)
+        if is_name_q:
+            saved_name = all_memories.get("Name")
+            if not saved_name and chat_id:
+                try:
+                    msgs = database.get_chat_messages(chat_id)
+                    for m in msgs:
+                        txt = m.get("text", "").lower()
+                        if "name is" in txt:
+                            for p in ["your name is", "my name is", "name is"]:
+                                if p in txt:
+                                    extracted = txt.split(p)[-1].strip().split(".")[0].split(",")[0].title()
+                                    if extracted:
+                                        saved_name = extracted
+                                        database.save_user_memory("Name", saved_name, user_id)
+                                        break
+                        if saved_name:
+                            break
+                except Exception:
+                    pass
+
+            if saved_name:
+                yield f"My name is **{saved_name}**!"
+                return
+            yield "I am **ASA Bot**, your AI Assistant! What is your name?"
+            return
+        if is_location_q:
+            if "City" in all_memories:
+                yield f"You live in **{all_memories['City']}**."
+                return
+            yield "I don't have your location saved yet. Where do you live?"
+            return
+
+    clean_q = normalized_q.rstrip(".,! ")
+    intent_map = {
+        "ok": "Great! How can I help you further?",
+        "okay": "Great! How can I help you further?",
+        "thanks": "You're welcome! Feel free to ask any more questions.",
+        "thank you": "You're welcome! Feel free to ask any more questions.",
+        "hi": "Hello! How can I assist you today?",
+        "hello": "Hello! How can I assist you today?",
+        "hey": "Hello! How can I assist you today?",
+        "bye": "Goodbye! Have a great day ahead!"
+    }
+    if clean_q in intent_map:
+        yield intent_map[clean_q]
+        return
+
+    resolved_search_query, history_str = resolve_followup_question(question, chat_id)
+    cache_key = f"{user_id}:{resolved_search_query.strip().lower()}"
+
+    if cache_key in RESPONSE_CACHE:
+        yield RESPONSE_CACHE[cache_key]
+        return
+
+    cleaned_question = fix_typos(resolved_search_query)
+    top_chunks, headings = get_retrieved_chunks(cleaned_question, top_n=3)
+    memory_ctx = get_memory_context(user_id)
+
+    doc_context = "\n\n---\n\n".join(top_chunks) if top_chunks else "No specific document context found."
+    if len(doc_context) > 1200:
+        doc_context = doc_context[:1200] + "..."
+
+    prompt = f"""You are a helpful and intelligent AI Assistant.
+
+{memory_ctx}
+
+RECENT CONVERSATION HISTORY:
+{history_str}
+
+DOCUMENT CONTEXT (from uploaded files):
+{doc_context}
+
+USER QUESTION: {question}
+
+INSTRUCTIONS:
+1. If the question asks about identity, user/bot names, or previous conversation history, use the RECENT CONVERSATION HISTORY and USER/AI MEMORY to answer directly.
+2. If the question asks about technical subjects or document content, use the DOCUMENT CONTEXT.
+3. Structure your response professionally in Markdown format."""
+
+    streamed_tokens = []
+
+    # 1. Cloud Gemini Stream (Fast Cloud Generation)
+    if _GEMINI_CLIENT is not None:
+        try:
+            response = _GEMINI_CLIENT.models.generate_content_stream(
+                model="gemini-2.0-flash",
+                contents=prompt,
+                config={"max_output_tokens": 350, "temperature": 0.2}
+            )
+            for chunk in response:
+                if chunk and hasattr(chunk, 'text') and chunk.text:
+                    streamed_tokens.append(chunk.text)
+                    yield chunk.text
+        except Exception as err:
+            print(f"[CLOUD STREAM ERROR] {err}")
+            if "429" in str(err) or "RESOURCE_EXHAUSTED" in str(err):
+                _GEMINI_CLIENT = None
+                print("[CLOUD LLM EXHAUSTED] Disabling Cloud API to ensure instant local response.")
+
+    # 2. Local Ollama Stream with Persistent Model Retention (keep_alive: 1h)
+    if not streamed_tokens:
+        try:
+            stream = ollama.chat(
+                model="gemma3:4b",
+                messages=[{"role": "user", "content": prompt}],
+                stream=True,
+                options=OLLAMA_FAST_OPTIONS
+            )
+            for chunk in stream:
+                token = chunk.get("message", {}).get("content", "")
+                if token:
+                    streamed_tokens.append(token)
+                    yield token
+        except Exception as e:
+            print(f"[OLLAMA STREAM ERROR] {e}")
+
+    # 3. Fast Extractor Fallback (Direct Chunk Stream)
+    if not streamed_tokens and top_chunks:
+        topic_title = headings[0] if headings else question.title()
+        main_text = top_chunks[0]
+        fallback_markdown = f"# {topic_title}\n\n## Definition & Details\n{main_text}"
+        
+        words = fallback_markdown.split(" ")
+        chunk_size = 4
+        for i in range(0, len(words), chunk_size):
+            chunk_str = " ".join(words[i:i+chunk_size]) + " "
+            streamed_tokens.append(chunk_str)
+            yield chunk_str
+
+    full_response = "".join(streamed_tokens).strip()
+    if full_response:
+        if len(RESPONSE_CACHE) >= CACHE_MAX_SIZE:
+            RESPONSE_CACHE.clear()
+        RESPONSE_CACHE[cache_key] = full_response
+    elif not streamed_tokens:
+        yield FALLBACK_NO_JS_DATA
