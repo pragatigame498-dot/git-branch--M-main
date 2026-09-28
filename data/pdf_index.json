@@ -1,10 +1,20 @@
 {
-  "Top-200-JS-Interview-Questions-pdf 1 1 3.pdf": {
-    "filename": "Top-200-JS-Interview-Questions-pdf 1 1 3.pdf",
-    "hash": "4132b5351feacacb7add7e064501822d",
-    "size": 11893936,
-    "pages": 280,
-    "chunks": 289,
-    "status": "ready"
+  "Python_Complete_Syllabus_Notes (2) (3).pdf": {
+    "filename": "Python_Complete_Syllabus_Notes (2) (3).pdf",
+    "hash": "8fdba6da676b35728037b34d6022fe45a35f32128ce0bef5c877a970987ed8e9",
+    "size": 221972,
+    "pages": 68,
+    "chunks": 150,
+    "status": "ready",
+    "processing_time_seconds": 72.629
+  },
+  "Python_Complete_Syllabus_Notes (1).pdf": {
+    "filename": "Python_Complete_Syllabus_Notes (1).pdf",
+    "hash": "8fdba6da676b35728037b34d6022fe45a35f32128ce0bef5c877a970987ed8e9",
+    "size": 221972,
+    "pages": 68,
+    "chunks": 150,
+    "status": "ready",
+    "processing_time_seconds": 110.0
   }
 }

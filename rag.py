@@ -1,5 +1,7 @@
 import os
 import re
+import sys
+import time
 import functools
 import asyncio
 from typing import Dict, List, Tuple, Optional, Set, Any
@@ -8,11 +10,28 @@ import ollama
 from create_db import get_global_vector_db
 import database
 from memory import extract_and_save_memories, get_memory_context
+import config
+
+# Enforce UTF-8 encoding on Windows stdout/stderr to prevent UnicodeEncodeError
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
+def safe_print(text: str) -> None:
+    """Print text safely on all OS terminals without encoding crashes."""
+    try:
+        print(text, flush=True)
+    except UnicodeEncodeError:
+        print(text.encode("ascii", errors="replace").decode("ascii"), flush=True)
 
 load_dotenv()
 
 # ==============================================================================
-# DEDICATED JAVASCRIPT RAG AI ASSISTANT PIPELINE WITH HIGH-PERFORMANCE CACHING
+# FAST, ROBUST RAG PIPELINE WITH REAL-TIME STREAMING & GEMINI / OLLAMA LLM
 # ==============================================================================
 
 _GEMINI_CLIENT = None
@@ -21,17 +40,15 @@ try:
     if api_key:
         from google import genai
         _GEMINI_CLIENT = genai.Client(api_key=api_key)
-        print("[INIT] Fast Cloud LLM Client Initialized Successfully!")
+        safe_print("[INIT] Fast Cloud LLM Client (Google GenAI) Initialized Successfully!")
 except Exception as e:
-    print(f"[WARNING] Cloud LLM init skipped: {e}")
+    safe_print(f"[WARNING] Cloud LLM init skipped: {e}")
 
-RESPONSE_CACHE: Dict[str, str] = {}
-RETRIEVAL_CACHE: Dict[str, Tuple[List[str], List[str]]] = {}
+RESPONSE_CACHE: Dict[str, Any] = {}
+RETRIEVAL_CACHE: Dict[str, Tuple[List[str], List[str], List[Dict[str, Any]]]] = {}
 CACHE_MAX_SIZE = 500
 
 DISTANCE_THRESHOLD = 1.0
-FALLBACK_NO_JS_DATA = "I don't know based on the provided JavaScript document."
-FALLBACK_NON_JS_TOPIC = "This chatbot only answers questions from the uploaded JavaScript document."
 
 TYPO_MAP = {
     "profetional": "professional",
@@ -56,18 +73,23 @@ EXPANSION_RULES = {
     "hoisting": "hoisting var function declaration TDZ temporal dead zone default initializations",
     "promise": "promise promises async await then catch resolve reject asynchronous event loop",
     "prototype": "prototype prototypal inheritance object prototype chain __proto__",
+    "python": "python programming language syntax functions data types classes modules pip",
 }
 
-NON_JS_TOPICS = [
-    "python", "java", "c++", "c#", "html", "css", "sql", "react",
-    "database", "networking", "machine learning", "ai", "operating system"
+# Working, prioritized Gemini Models (Fast & Active)
+GEMINI_MODELS = [
+    "gemini-3.5-flash",
+    "gemini-3-flash-preview",
+    "gemini-3.5-flash-lite",
+    "gemini-flash-latest",
+    "gemini-2.5-flash"
 ]
 
 OLLAMA_FAST_OPTIONS = {
-    "keep_alive": "1h",
-    "num_ctx": 1500,
-    "num_predict": 350,
-    "num_thread": 8,
+    "keep_alive": "24h",
+    "num_ctx": 2048,
+    "num_predict": 500,
+    "num_thread": 4,  # Cap CPU threads to prevent system freezing/hanging
     "temperature": 0.2,
     "top_k": 10,
     "top_p": 0.8
@@ -77,19 +99,6 @@ def fix_typos(text: str) -> str:
     words = text.split()
     fixed = [TYPO_MAP.get(w.lower(), w) for w in words]
     return " ".join(fixed)
-
-def is_non_js_topic_query(text: str) -> bool:
-    text_lower = text.lower().strip()
-    forbidden = ["python", "css", "html", "c++", "c#", "sql", "react", "database", "networking", "machine learning", "operating system"]
-    
-    for topic in forbidden:
-        if re.search(r"\b" + re.escape(topic) + r"\b", text_lower):
-            return True
-
-    if re.search(r"\bjava\b", text_lower) and not re.search(r"\bjavascript\b", text_lower) and not re.search(r"\bjs\b", text_lower):
-        return True
-
-    return False
 
 def resolve_followup_question(question: str, chat_id: Optional[str]) -> Tuple[str, str]:
     """
@@ -113,10 +122,10 @@ def resolve_followup_question(question: str, chat_id: Optional[str]) -> Tuple[st
                     user_txt = content
                     if len(user_txt.split()) <= 6 and not any(w in user_txt.lower() for w in ["types", "syntax", "methods", "its", "it", "ok", "hi"]):
                         last_topic = user_txt
-                    elif any(k in user_txt.lower() for k in ["javascript", "variable", "function", "array", "promise"]):
+                    elif any(k in user_txt.lower() for k in ["python", "javascript", "variable", "function", "array", "promise"]):
                         last_topic = user_txt
         except Exception as e:
-            print(f"[HISTORY WARNING] Could not fetch chat messages: {e}")
+            safe_print(f"[HISTORY WARNING] Could not fetch chat messages: {e}")
 
     history_str = "\n".join(history_lines) if history_lines else "No previous history in this session."
     
@@ -131,8 +140,6 @@ def resolve_followup_question(question: str, chat_id: Optional[str]) -> Tuple[st
     resolved_q = question
     if is_short_followup and last_topic:
         clean_topic = last_topic.rstrip("?.,! ")
-        if "javascript" not in clean_topic.lower() and "js" not in clean_topic.lower():
-            clean_topic = f"JavaScript {clean_topic}"
         resolved_q = f"{clean_topic} {question}"
 
     return resolved_q, history_str
@@ -164,15 +171,15 @@ def clear_rag_cache() -> None:
     global RESPONSE_CACHE, RETRIEVAL_CACHE
     RESPONSE_CACHE.clear()
     RETRIEVAL_CACHE.clear()
-    print("[CACHE] RAG Caches cleared due to index update.")
+    safe_print("[CACHE] RAG Caches cleared due to index update.")
 
 def clean_and_rerank_chunks(
     results: List[Tuple[Any, float]], 
     query: str, 
-    top_n: int = 3
-) -> Tuple[List[str], List[str]]:
+    top_n: int = 4
+) -> Tuple[List[str], List[str], List[Dict[str, Any]]]:
     if not results:
-        return [], []
+        return [], [], []
 
     query_words = set(re.findall(r"\w+", query.lower()))
     scored_chunks = []
@@ -197,10 +204,25 @@ def clean_and_rerank_chunks(
         vector_score = 1.0 / (1.0 + distance)
         hybrid_score = (vector_score * 0.7) + (keyword_overlap * 0.3)
 
-        scored_chunks.append((hybrid_score, text, doc.metadata))
+        metadata = getattr(doc, "metadata", {}) or {}
+        scored_chunks.append((hybrid_score, text, metadata))
 
     scored_chunks.sort(key=lambda x: x[0], reverse=True)
-    top_chunks = [item[1] for item in scored_chunks[:top_n]]
+    top_items = scored_chunks[:top_n]
+    top_chunks = [item[1] for item in top_items]
+
+    sources_list = []
+    seen_sources = set()
+    for _, _, meta in top_items:
+        src_path = meta.get("source", "")
+        filename = os.path.basename(src_path) if src_path else "Uploaded Document.pdf"
+        page = meta.get("page", 1)
+        if isinstance(page, int):
+            page += 1  # Convert 0-indexed PyPDF page to 1-indexed human page
+        source_key = f"{filename}:p{page}"
+        if source_key not in seen_sources:
+            seen_sources.add(source_key)
+            sources_list.append({"file": filename, "page": page})
 
     extracted_headings = []
     heading_pattern = r"(?:^|\n)(?:#+ |\d+\.\d+ |Question \d+:? |Q:? )([^\n]+)"
@@ -211,58 +233,97 @@ def clean_and_rerank_chunks(
             if clean_m and len(clean_m) > 3 and clean_m not in extracted_headings:
                 extracted_headings.append(clean_m)
 
-    return top_chunks, extracted_headings[:4]
+    return top_chunks, extracted_headings[:4], sources_list
 
-def get_retrieved_chunks(cleaned_question: str, top_n: int = 3) -> Tuple[List[str], List[str]]:
+def get_retrieved_chunks(cleaned_question: str, top_n: Optional[int] = None) -> Tuple[List[str], List[str], List[Dict[str, Any]]]:
+    if top_n is None:
+        top_n = config.TOP_K
+
     if cleaned_question in RETRIEVAL_CACHE:
         return RETRIEVAL_CACHE[cleaned_question]
     
     db = get_global_vector_db()
     pass1_results = []
     try:
-        pass1_results = db.similarity_search_with_score(cleaned_question, k=4)
+        pass1_results = db.similarity_search_with_score(cleaned_question, k=top_n)
     except Exception as e:
-        print(f"[PASS 1 ERROR] {e}")
+        safe_print(f"[PASS 1 ERROR] {e}")
 
-    top_chunks, headings = clean_and_rerank_chunks(pass1_results, cleaned_question, top_n=top_n)
+    top_chunks, headings, sources = clean_and_rerank_chunks(pass1_results, cleaned_question, top_n=top_n)
     if not top_chunks:
         expanded_q = expand_query(cleaned_question)
         try:
-            pass2_results = db.similarity_search_with_score(expanded_q, k=4)
-            top_chunks, headings = clean_and_rerank_chunks(pass2_results, expanded_q, top_n=top_n)
+            pass2_results = db.similarity_search_with_score(expanded_q, k=top_n)
+            top_chunks, headings, sources = clean_and_rerank_chunks(pass2_results, expanded_q, top_n=top_n)
         except Exception as e:
-            print(f"[PASS 2 ERROR] {e}")
+            safe_print(f"[PASS 2 ERROR] {e}")
 
     if len(RETRIEVAL_CACHE) >= CACHE_MAX_SIZE:
         RETRIEVAL_CACHE.clear()
 
-    RETRIEVAL_CACHE[cleaned_question] = (top_chunks, headings)
-    return top_chunks, headings
+    RETRIEVAL_CACHE[cleaned_question] = (top_chunks, headings, sources)
+    return top_chunks, headings, sources
 
-def ask_rag(question: str, user_id: str = "default_user", chat_id: Optional[str] = None) -> str:
+def build_rag_prompt(question: str, top_chunks: List[str], user_id: str = "default_user") -> str:
+    """Build a clean, robust RAG system prompt with retrieved context."""
+    doc_context = "\n\n---\n\n".join(top_chunks) if top_chunks else ""
+    if len(doc_context) > 3000:
+        doc_context = doc_context[:3000] + "..."
+
+    prompt = f"""You are a helpful, intelligent RAG AI assistant.
+
+Provide a thorough, comprehensive, and well-structured answer to the user's question using the retrieved context when relevant.
+
+Guidelines:
+1. Use the provided context as your primary source of knowledge.
+2. Structure your answer clearly with Markdown:
+   - Use headings (`##` and `###`) for main concepts.
+   - Use bullet points (`- `) for lists and key points.
+   - Use bold (`**term**`) for important terms.
+   - For code examples, use fenced code blocks with language identifiers (e.g. ```python or ```javascript).
+3. Ensure the response is complete, clean, and directly answers the question.
+
+CONTEXT:
+{doc_context if doc_context else "No document context available."}
+
+USER QUESTION:
+{question}"""
+    return prompt
+
+def ask_rag(question: str, user_id: str = "default_user", chat_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Process user query through RAG pipeline with high-speed generation and detailed logs.
+    """
+    t_start = time.time()
     global _GEMINI_CLIENT
+
+    safe_print(f"\n[CHAT] Question received: {question}")
+    safe_print("[CHAT] Request started")
+
+    if not question or not question.strip():
+        return {
+            "success": True,
+            "answer": "Please enter a question.",
+            "sources": [],
+            "perf": {"total_s": 0.0}
+        }
+
     normalized_q = question.strip().lower()
 
-    if is_non_js_topic_query(question):
-        return FALLBACK_NON_JS_TOPIC
-
+    # AI Memory extraction
     extracted_memories = extract_and_save_memories(question, user_id)
     if extracted_memories:
         if "Name" in extracted_memories:
-            name = extracted_memories["Name"]
-            return f"Hello! Details saved. I will remember that the name is **{name}**."
+            ans = f"Hello! Details saved. I will remember that your name is **{extracted_memories['Name']}**."
         else:
             facts_str = ", ".join([f"**{k}**: {v}" for k, v in extracted_memories.items()])
-            return f"Got it! I have saved {facts_str} in my memory."
+            ans = f"Got it! I have saved {facts_str} in my memory."
+        return {"success": True, "answer": ans, "sources": [], "perf": {"total_s": round(time.time() - t_start, 4)}}
 
     is_name_q = any(p in normalized_q for p in [
         "what is my name", "what's my name", "what is your name", "what's your name",
-        "what is your self name", "what is your self-name", "what's your self name",
-        "who am i", "who i am", "who are you", "who r u", "tell me my name", "tell me your name",
-        "do you know my name", "do you know your name", "what is name", "self name",
-        "tuze nav", "tujhe nav", "tumche nav", "majhe nav", "majh nav", "nav kay"
-    ]) or ("name" in normalized_q and any(w in normalized_q for w in ["what", "who", "tell", "know", "your", "my", "self"]))
-
+        "who am i", "who i am", "who are you", "who r u", "tell me my name", "tell me your name"
+    ])
     is_location_q = any(p in normalized_q for p in [
         "where do i live", "what is my city", "where am i from", "my location", "where i live"
     ])
@@ -271,141 +332,147 @@ def ask_rag(question: str, user_id: str = "default_user", chat_id: Optional[str]
         all_memories = database.get_all_user_memories(user_id)
         if is_name_q:
             saved_name = all_memories.get("Name")
-            if not saved_name and chat_id:
-                try:
-                    msgs = database.get_chat_messages(chat_id)
-                    for m in msgs:
-                        txt = m.get("text", "").lower()
-                        if "name is" in txt:
-                            for p in ["your name is", "my name is", "name is"]:
-                                if p in txt:
-                                    extracted = txt.split(p)[-1].strip().split(".")[0].split(",")[0].title()
-                                    if extracted:
-                                        saved_name = extracted
-                                        database.save_user_memory("Name", saved_name, user_id)
-                                        break
-                        if saved_name:
-                            break
-                except Exception:
-                    pass
-
             if saved_name:
-                return f"My name is **{saved_name}**!"
-            return "I am **ASA Bot**, your AI Assistant! What is your name?"
+                return {"success": True, "answer": f"Your name is **{saved_name}**!", "sources": [], "perf": {"total_s": round(time.time() - t_start, 4)}}
+            return {"success": True, "answer": "I am your **RAG AI Assistant**! What is your name?", "sources": [], "perf": {"total_s": round(time.time() - t_start, 4)}}
         if is_location_q:
             if "City" in all_memories:
-                return f"You live in **{all_memories['City']}**."
-            return "I don't have your location saved yet. Where do you live?"
+                return {"success": True, "answer": f"You live in **{all_memories['City']}**.", "sources": [], "perf": {"total_s": round(time.time() - t_start, 4)}}
+            return {"success": True, "answer": "I don't have your location saved yet. Where do you live?", "sources": [], "perf": {"total_s": round(time.time() - t_start, 4)}}
 
     clean_q = normalized_q.rstrip(".,! ")
-    if clean_q in ["ok", "okay", "k", "sure", "got it", "cool", "great", "alright"]:
-        return "Great! How can I help you further?"
-    if any(clean_q.startswith(p) for p in ["thanks", "thank you", "thx"]):
-        return "You're welcome! Feel free to ask any more questions."
     if clean_q in ["hi", "hello", "hey"]:
-        return "Hello! How can I assist you today?"
+        return {"success": True, "answer": "Hello! How can I assist you today?", "sources": [], "perf": {"total_s": round(time.time() - t_start, 4)}}
     if clean_q in ["bye", "goodbye"]:
-        return "Goodbye! Have a great day ahead!"
+        return {"success": True, "answer": "Goodbye! Have a great day ahead!", "sources": [], "perf": {"total_s": round(time.time() - t_start, 4)}}
 
     resolved_search_query, history_str = resolve_followup_question(question, chat_id)
     cache_key = f"{user_id}:{resolved_search_query.strip().lower()}"
     if cache_key in RESPONSE_CACHE:
-        return RESPONSE_CACHE[cache_key]
+        cached_val = RESPONSE_CACHE[cache_key]
+        if isinstance(cached_val, dict):
+            return cached_val
+        return {"success": True, "answer": str(cached_val), "sources": [], "perf": {"total_s": round(time.time() - t_start, 4)}}
 
+    # 1. Query Embedding
+    safe_print("[CHAT] Query embedding started")
+    t_embed_start = time.time()
     cleaned_question = fix_typos(resolved_search_query)
-    top_chunks, headings = get_retrieved_chunks(cleaned_question, top_n=3)
-    memory_ctx = get_memory_context(user_id)
+    query_embed_time = round(time.time() - t_embed_start, 4)
+    safe_print(f"[CHAT] Query embedding completed: {query_embed_time}s")
 
-    doc_context = "\n\n---\n\n".join(top_chunks) if top_chunks else "No specific document context found."
-    if len(doc_context) > 1200:
-        doc_context = doc_context[:1200] + "..."
+    # 2. Vector Retrieval
+    safe_print("[CHAT] Retrieval started")
+    t_retrieval_start = time.time()
+    top_chunks, headings, sources_list = get_retrieved_chunks(cleaned_question, top_n=config.TOP_K)
+    retrieval_time = round(time.time() - t_retrieval_start, 4)
+    safe_print(f"[CHAT] Retrieval completed: {retrieval_time}s")
+    safe_print(f"[CHAT] Retrieved chunks: {len(top_chunks)}")
 
-    prompt = f"""You are a helpful and intelligent AI Assistant.
+    # 3. Prompt Construction
+    prompt = build_rag_prompt(question, top_chunks, user_id)
 
-{memory_ctx}
-
-RECENT CONVERSATION HISTORY:
-{history_str}
-
-DOCUMENT CONTEXT (from uploaded files):
-{doc_context}
-
-USER QUESTION: {question}
-
-INSTRUCTIONS:
-1. If the question asks about identity, user/bot names, or previous conversation history, use the RECENT CONVERSATION HISTORY and USER/AI MEMORY to answer directly.
-2. If the question asks about technical subjects or document content, use the DOCUMENT CONTEXT.
-3. Structure your response professionally in Markdown format."""
-
+    # 4. LLM Generation
+    safe_print("[CHAT] LLM request started")
     answer = None
-    if _GEMINI_CLIENT is not None:
-        try:
-            response = _GEMINI_CLIENT.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=prompt,
-                config={"max_output_tokens": 300, "temperature": 0.2}
-            )
-            if response and response.text:
-                answer = response.text.strip()
-        except Exception as err:
-            if "429" in str(err) or "RESOURCE_EXHAUSTED" in str(err):
-                _GEMINI_CLIENT = None
-                print("[CLOUD LLM EXHAUSTED] Disabling Cloud API to ensure instant local response.")
+    t_llm_start = time.time()
+    used_model = "None"
 
+    if _GEMINI_CLIENT is not None:
+        for model_name in GEMINI_MODELS:
+            try:
+                safe_print(f"[CHAT] Trying Gemini model: {model_name}")
+                response = _GEMINI_CLIENT.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config={"max_output_tokens": 2048, "temperature": 0.2}
+                )
+                if response and response.text:
+                    answer = response.text.strip()
+                    used_model = model_name
+                    safe_print(f"[CHAT] LLM response started with {model_name}")
+                    break
+            except Exception as err:
+                safe_print(f"[CLOUD LLM WARNING ({model_name})] {err}")
+
+    # Fallback to Ollama if Cloud is unavailable
     if not answer:
         try:
+            safe_print("[CHAT] Falling back to local Ollama LLM (gemma3:4b)...")
             response = ollama.chat(
                 model="gemma3:4b",
                 messages=[{"role": "user", "content": prompt}],
                 options=OLLAMA_FAST_OPTIONS
             )
             answer = response["message"]["content"].strip()
-        except Exception:
-            pass
+            used_model = "gemma3:4b (Ollama)"
+        except Exception as e:
+            safe_print(f"[OLLAMA LLM ERROR] {e}")
 
-    if not answer and top_chunks:
-        topic_title = headings[0] if headings else question.title()
-        main_text = top_chunks[0]
-        answer = f"# {topic_title}\n\n## Definition & Details\n{main_text}"
+    llm_time = round(time.time() - t_llm_start, 4)
+    safe_print(f"[CHAT] LLM response completed: {llm_time}s")
 
     if not answer:
-        RESPONSE_CACHE[cache_key] = FALLBACK_NO_JS_DATA
-        return FALLBACK_NO_JS_DATA
+        answer = "I'm sorry, I could not generate an answer at this time. Please try again."
+        sources_list = []
+
+    # Attach Sources section if sources exist
+    if sources_list and "Sources:" not in answer:
+        source_lines = [f"📄 {s['file']} (Page {s['page']})" for s in sources_list]
+        sources_md = "\n\n---\n**Sources:**\n" + "\n".join(source_lines)
+        answer += sources_md
+
+    total_time = round(time.time() - t_start, 4)
+    safe_print(f"[CHAT] Response length: {len(answer)}")
+    safe_print("[CHAT] Sending response to frontend")
+    safe_print(f"[PERF] Query embedding: {query_embed_time}s | Retrieval: {retrieval_time}s | LLM: {llm_time}s | Total: {total_time}s")
+
+    res_obj = {
+        "success": True,
+        "answer": answer,
+        "sources": sources_list,
+        "perf": {
+            "query_embedding_s": query_embed_time,
+            "retrieval_s": retrieval_time,
+            "llm_s": llm_time,
+            "total_s": total_time,
+            "model": used_model
+        }
+    }
 
     if len(RESPONSE_CACHE) >= CACHE_MAX_SIZE:
         RESPONSE_CACHE.clear()
 
-    RESPONSE_CACHE[cache_key] = answer
-    return answer
+    RESPONSE_CACHE[cache_key] = res_obj
+    return res_obj
 
 async def ask_rag_stream(question: str, user_id: str = "default_user", chat_id: Optional[str] = None):
     """
-    Async Generator for zero-delay token streaming.
-    Utilizes Ollama model retention (keep_alive), reduced context, and instant yielding.
+    Async Generator for real-time token streaming with instant response delivery.
     """
     global _GEMINI_CLIENT
-    if is_non_js_topic_query(question):
-        yield FALLBACK_NON_JS_TOPIC
-        return
+    safe_print(f"\n[CHAT] Question received (Stream): {question}")
+    safe_print("[CHAT] Request started")
 
-    extracted_memories = extract_and_save_memories(question, user_id)
-    if extracted_memories:
-        if "Name" in extracted_memories:
-            yield f"Hello! Details saved. I will remember that the name is **{extracted_memories['Name']}**."
-        else:
-            yield "Got it! Saved to memory."
+    if not question or not question.strip():
+        yield "Please enter a question."
         return
 
     normalized_q = question.strip().lower()
 
+    # AI Memory extraction
+    extracted_memories = extract_and_save_memories(question, user_id)
+    if extracted_memories:
+        if "Name" in extracted_memories:
+            yield f"Hello! Details saved. I will remember that your name is **{extracted_memories['Name']}**."
+        else:
+            yield "Got it! Saved to memory."
+        return
+
     is_name_q = any(p in normalized_q for p in [
         "what is my name", "what's my name", "what is your name", "what's your name",
-        "what is your self name", "what is your self-name", "what's your self name",
-        "who am i", "who i am", "who are you", "who r u", "tell me my name", "tell me your name",
-        "do you know my name", "do you know your name", "what is name", "self name",
-        "tuze nav", "tujhe nav", "tumche nav", "majhe nav", "majh nav", "nav kay"
-    ]) or ("name" in normalized_q and any(w in normalized_q for w in ["what", "who", "tell", "know", "your", "my", "self"]))
-
+        "who am i", "who i am", "who are you", "who r u", "tell me my name", "tell me your name"
+    ])
     is_location_q = any(p in normalized_q for p in [
         "where do i live", "what is my city", "where am i from", "my location", "where i live"
     ])
@@ -414,28 +481,10 @@ async def ask_rag_stream(question: str, user_id: str = "default_user", chat_id: 
         all_memories = database.get_all_user_memories(user_id)
         if is_name_q:
             saved_name = all_memories.get("Name")
-            if not saved_name and chat_id:
-                try:
-                    msgs = database.get_chat_messages(chat_id)
-                    for m in msgs:
-                        txt = m.get("text", "").lower()
-                        if "name is" in txt:
-                            for p in ["your name is", "my name is", "name is"]:
-                                if p in txt:
-                                    extracted = txt.split(p)[-1].strip().split(".")[0].split(",")[0].title()
-                                    if extracted:
-                                        saved_name = extracted
-                                        database.save_user_memory("Name", saved_name, user_id)
-                                        break
-                        if saved_name:
-                            break
-                except Exception:
-                    pass
-
             if saved_name:
-                yield f"My name is **{saved_name}**!"
+                yield f"Your name is **{saved_name}**!"
                 return
-            yield "I am **ASA Bot**, your AI Assistant! What is your name?"
+            yield "I am your **RAG AI Assistant**! What is your name?"
             return
         if is_location_q:
             if "City" in all_memories:
@@ -463,88 +512,142 @@ async def ask_rag_stream(question: str, user_id: str = "default_user", chat_id: 
     cache_key = f"{user_id}:{resolved_search_query.strip().lower()}"
 
     if cache_key in RESPONSE_CACHE:
-        yield RESPONSE_CACHE[cache_key]
+        cached_val = RESPONSE_CACHE[cache_key]
+        if isinstance(cached_val, dict):
+            yield cached_val.get("answer", "")
+        else:
+            yield str(cached_val)
         return
 
+    # 1. Query Embedding & Retrieval in thread
+    safe_print("[CHAT] Query embedding started")
     cleaned_question = fix_typos(resolved_search_query)
-    top_chunks, headings = get_retrieved_chunks(cleaned_question, top_n=3)
-    memory_ctx = get_memory_context(user_id)
+    safe_print("[CHAT] Retrieval started")
+    top_chunks, headings, sources_list = await asyncio.to_thread(
+        get_retrieved_chunks, cleaned_question, config.TOP_K
+    )
+    safe_print(f"[CHAT] Retrieval completed. Retrieved chunks: {len(top_chunks)}")
 
-    doc_context = "\n\n---\n\n".join(top_chunks) if top_chunks else "No specific document context found."
-    if len(doc_context) > 1200:
-        doc_context = doc_context[:1200] + "..."
-
-    prompt = f"""You are a helpful and intelligent AI Assistant.
-
-{memory_ctx}
-
-RECENT CONVERSATION HISTORY:
-{history_str}
-
-DOCUMENT CONTEXT (from uploaded files):
-{doc_context}
-
-USER QUESTION: {question}
-
-INSTRUCTIONS:
-1. If the question asks about identity, user/bot names, or previous conversation history, use the RECENT CONVERSATION HISTORY and USER/AI MEMORY to answer directly.
-2. If the question asks about technical subjects or document content, use the DOCUMENT CONTEXT.
-3. Structure your response professionally in Markdown format."""
+    # 2. Prompt Construction
+    prompt = build_rag_prompt(question, top_chunks, user_id)
 
     streamed_tokens = []
+    llm_start_time = time.time()
+    safe_print("[CHAT] LLM request started (Streaming)")
 
-    # 1. Cloud Gemini Stream (Fast Cloud Generation)
+    # 3. Stream from Cloud Gemini Client
     if _GEMINI_CLIENT is not None:
-        try:
-            response = _GEMINI_CLIENT.models.generate_content_stream(
-                model="gemini-2.0-flash",
-                contents=prompt,
-                config={"max_output_tokens": 350, "temperature": 0.2}
-            )
-            for chunk in response:
-                if chunk and hasattr(chunk, 'text') and chunk.text:
-                    streamed_tokens.append(chunk.text)
-                    yield chunk.text
-        except Exception as err:
-            print(f"[CLOUD STREAM ERROR] {err}")
-            if "429" in str(err) or "RESOURCE_EXHAUSTED" in str(err):
-                _GEMINI_CLIENT = None
-                print("[CLOUD LLM EXHAUSTED] Disabling Cloud API to ensure instant local response.")
+        for model_name in GEMINI_MODELS:
+            try:
+                safe_print(f"[CHAT] Attempting stream with model: {model_name}")
+                
+                # Use a queue to safely bridge synchronous SDK streaming iterator with async generator
+                queue = asyncio.Queue()
+                
+                def sync_stream_worker():
+                    try:
+                        stream = _GEMINI_CLIENT.models.generate_content_stream(
+                            model=model_name,
+                            contents=prompt,
+                            config={"max_output_tokens": 2048, "temperature": 0.2}
+                        )
+                        for chunk in stream:
+                            if chunk and hasattr(chunk, 'text') and chunk.text:
+                                queue.put_nowait(("token", chunk.text))
+                        queue.put_nowait(("done", None))
+                    except Exception as ex:
+                        queue.put_nowait(("error", ex))
 
-    # 2. Local Ollama Stream with Persistent Model Retention (keep_alive: 1h)
+                # Start worker in background thread
+                worker_task = asyncio.create_task(asyncio.to_thread(sync_stream_worker))
+                
+                first_token_logged = False
+                while True:
+                    # Timeout safeguard
+                    if time.time() - llm_start_time > config.LLM_TIMEOUT_SECONDS:
+                        safe_print("[LLM STREAM TIMEOUT] Max stream timeout reached.")
+                        break
+                    
+                    try:
+                        event_type, val = await asyncio.wait_for(queue.get(), timeout=1.0)
+                    except asyncio.TimeoutError:
+                        if worker_task.done():
+                            break
+                        continue
+
+                    if event_type == "token":
+                        if not first_token_logged:
+                            safe_print(f"[CHAT] LLM response started (First token in {round(time.time() - llm_start_time, 3)}s)")
+                            first_token_logged = True
+                        streamed_tokens.append(val)
+                        yield val
+                    elif event_type == "done":
+                        break
+                    elif event_type == "error":
+                        safe_print(f"[CLOUD STREAM ERROR ({model_name})] {val}")
+                        break
+
+                if streamed_tokens:
+                    break
+            except Exception as err:
+                safe_print(f"[CLOUD STREAM EXCEPTION ({model_name})] {err}")
+
+    # Fallback to Local Ollama Stream
     if not streamed_tokens:
         try:
-            stream = ollama.chat(
-                model="gemma3:4b",
-                messages=[{"role": "user", "content": prompt}],
-                stream=True,
-                options=OLLAMA_FAST_OPTIONS
-            )
-            for chunk in stream:
-                token = chunk.get("message", {}).get("content", "")
-                if token:
-                    streamed_tokens.append(token)
-                    yield token
-        except Exception as e:
-            print(f"[OLLAMA STREAM ERROR] {e}")
+            safe_print("[CHAT] Falling back to Ollama stream...")
+            queue = asyncio.Queue()
 
-    # 3. Fast Extractor Fallback (Direct Chunk Stream)
-    if not streamed_tokens and top_chunks:
-        topic_title = headings[0] if headings else question.title()
-        main_text = top_chunks[0]
-        fallback_markdown = f"# {topic_title}\n\n## Definition & Details\n{main_text}"
-        
-        words = fallback_markdown.split(" ")
-        chunk_size = 4
-        for i in range(0, len(words), chunk_size):
-            chunk_str = " ".join(words[i:i+chunk_size]) + " "
-            streamed_tokens.append(chunk_str)
-            yield chunk_str
+            def ollama_stream_worker():
+                try:
+                    stream = ollama.chat(
+                        model="gemma3:4b",
+                        messages=[{"role": "user", "content": prompt}],
+                        stream=True,
+                        options=OLLAMA_FAST_OPTIONS
+                    )
+                    for chunk in stream:
+                        tok = chunk.get("message", {}).get("content", "")
+                        if tok:
+                            queue.put_nowait(("token", tok))
+                    queue.put_nowait(("done", None))
+                except Exception as ex:
+                    queue.put_nowait(("error", ex))
+
+            worker_task = asyncio.create_task(asyncio.to_thread(ollama_stream_worker))
+            while True:
+                if time.time() - llm_start_time > config.LLM_TIMEOUT_SECONDS:
+                    break
+                try:
+                    event_type, val = await asyncio.wait_for(queue.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    if worker_task.done():
+                        break
+                    continue
+
+                if event_type == "token":
+                    streamed_tokens.append(val)
+                    yield val
+                elif event_type == "done" or event_type == "error":
+                    break
+        except Exception as e:
+            safe_print(f"[OLLAMA STREAM ERROR] {e}")
 
     full_response = "".join(streamed_tokens).strip()
-    if full_response:
-        if len(RESPONSE_CACHE) >= CACHE_MAX_SIZE:
-            RESPONSE_CACHE.clear()
-        RESPONSE_CACHE[cache_key] = full_response
-    elif not streamed_tokens:
-        yield FALLBACK_NO_JS_DATA
+
+    if not full_response:
+        fallback_msg = "I'm sorry, I could not generate an answer at this time. Please try again."
+        yield fallback_msg
+        full_response = fallback_msg
+    elif sources_list and "Sources:" not in full_response:
+        source_lines = [f"📄 {s['file']} (Page {s['page']})" for s in sources_list]
+        sources_md = "\n\n---\n**Sources:**\n" + "\n".join(source_lines)
+        yield sources_md
+        full_response += sources_md
+
+    safe_print(f"[CHAT] LLM response completed. Total stream tokens length: {len(full_response)}")
+    safe_print("[CHAT] Sending response to frontend")
+
+    if len(RESPONSE_CACHE) >= CACHE_MAX_SIZE:
+        RESPONSE_CACHE.clear()
+    RESPONSE_CACHE[cache_key] = full_response

@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { motion } from 'framer-motion';
-import { User, Copy, Check, RefreshCw } from 'lucide-react';
+import { User, Copy, Check, RefreshCw, Bot } from 'lucide-react';
 import AnimatedRobot from './AnimatedRobot';
 
 // ==============================================================================
@@ -87,11 +87,13 @@ function CodeBlock({ className, children, onCopySuccess }) {
 // ==============================================================================
 
 function ChatMessage({ message, onCopySuccess, onRegenerate }) {
+  if (!message) return null;
   const isUser = message.sender === 'user';
+  const safeText = typeof message.text === 'string' ? message.text : String(message.text || '');
   const [isAnswerCopied, setIsAnswerCopied] = useState(false);
 
   const handleCopyAnswer = () => {
-    navigator.clipboard.writeText(message.text);
+    navigator.clipboard.writeText(safeText);
     setIsAnswerCopied(true);
     if (onCopySuccess) onCopySuccess("Answer copied to clipboard!");
     setTimeout(() => setIsAnswerCopied(false), 2000);
@@ -108,24 +110,29 @@ function ChatMessage({ message, onCopySuccess, onRegenerate }) {
       transition={{ type: "spring", stiffness: 350, damping: 22 }}
       className={`flex gap-3 text-sm my-4 transition-all ${isUser ? 'justify-end' : 'justify-start'}`}
     >
-      {/* Animated AI Robot Avatar */}
+      {/* Bot Avatar */}
       {!isUser && (
-        <div className="w-10 h-12 shrink-0 flex items-center justify-center mt-0.5">
-          <AnimatedRobot size="sm" />
-        </div>
+        <motion.div 
+          whileHover={{ rotate: 12, scale: 1.1 }}
+          className="w-8 h-8 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center justify-center text-white shrink-0 shadow-md shadow-blue-500/20 mt-1 cursor-pointer"
+        >
+          <Bot className="w-4 h-4" />
+        </motion.div>
       )}
 
-      {/* Message Bubble Container */}
-      <div className={`group relative max-w-[88%] sm:max-w-[84%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+      {/* Bubble Container */}
+      <div className={`group relative max-w-[85%] sm:max-w-[78%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+        
+        {/* Message Content Box */}
         <div className={`
-          px-5 py-4 rounded-[22px] transition-all duration-300 font-normal leading-relaxed text-base
+          relative px-4 py-3.5 rounded-3xl transition-all duration-300 shadow-sm
           ${isUser 
-            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-tr-xs shadow-md shadow-blue-500/25 hover:shadow-lg hover:shadow-blue-500/35 font-medium' 
-            : 'bg-white/95 text-slate-800 border border-slate-200/90 dark:bg-[#1E293B] dark:text-slate-100 dark:border-slate-700/80 rounded-tl-xs shadow-xs hover:shadow-md'
+            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-br-none shadow-blue-500/15' 
+            : 'bg-white dark:bg-[#1E293B] text-[#111827] dark:text-slate-100 rounded-bl-none border border-slate-200/80 dark:border-slate-800 shadow-slate-900/5'
           }
         `}>
           {isUser ? (
-            <p className="whitespace-pre-wrap text-white font-medium text-base leading-relaxed">{message.text}</p>
+            <p className="whitespace-pre-wrap text-white font-medium text-base leading-relaxed">{safeText}</p>
           ) : (
             <motion.div 
               initial={{ opacity: 0 }}

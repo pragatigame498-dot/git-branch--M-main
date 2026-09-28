@@ -220,12 +220,12 @@ function Sidebar({
 
             <div className="space-y-1">
               <AnimatePresence>
-                {uploadedPdfs.length === 0 ? (
+                {(!uploadedPdfs || uploadedPdfs.length === 0) ? (
                   <p className="px-2 py-2 text-xs text-slate-400 dark:text-slate-500 italic">No PDF document loaded.</p>
                 ) : (
-                  uploadedPdfs.map((pdf, idx) => (
+                  uploadedPdfs.filter(pdf => pdf && pdf.filename).map((pdf, idx) => (
                     <motion.div
-                      key={idx}
+                      key={pdf.filename || idx}
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.95 }}
@@ -234,6 +234,11 @@ function Sidebar({
                       <div className="flex items-center gap-2 min-w-0">
                         <FileText className="w-3.5 h-3.5 text-purple-500 shrink-0" />
                         <span className="truncate text-xs font-medium">{pdf.filename}</span>
+                        {pdf.status === 'processing' && (
+                          <span className="px-1.5 py-0.5 text-[9px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 rounded">
+                            Processing...
+                          </span>
+                        )}
                       </div>
                       {onDeletePdf && (
                         <motion.button

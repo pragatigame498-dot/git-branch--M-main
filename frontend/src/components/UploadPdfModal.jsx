@@ -32,6 +32,7 @@ function UploadPdfModal({ isOpen, onClose, onUploadSuccess, uploadedPdfs = [] })
   const [uploadSummary, setUploadSummary] = useState(null);
 
   const fileInputRef = useRef(null);
+  const uploadAbortRef = useRef(null);
 
   if (!isOpen) return null;
 
@@ -64,6 +65,14 @@ function UploadPdfModal({ isOpen, onClose, onUploadSuccess, uploadedPdfs = [] })
     }
   };
 
+  const handleCancelUpload = () => {
+    if (uploadAbortRef.current) {
+      uploadAbortRef.current.abort();
+      uploadAbortRef.current = null;
+    }
+    handleReset();
+  };
+
   const processFileUpload = async (file) => {
     if (!file) return;
 
@@ -85,15 +94,16 @@ function UploadPdfModal({ isOpen, onClose, onUploadSuccess, uploadedPdfs = [] })
     setErrorMessage('');
 
     try {
+      uploadAbortRef.current = new AbortController();
       const formData = new FormData();
       formData.append("file", file);
 
       const progressTimer = setInterval(() => {
         setUploadProgress((prev) => {
-          if (prev >= 65) {
+          if (prev >= 75) {
             clearInterval(progressTimer);
             setUploadState('embedding');
-            return 82;
+            return 90;
           }
           return prev + 15;
         });
@@ -103,17 +113,20 @@ function UploadPdfModal({ isOpen, onClose, onUploadSuccess, uploadedPdfs = [] })
         headers: {
           "Content-Type": "multipart/form-data",
         },
+        signal: uploadAbortRef.current.signal
       });
 
       clearInterval(progressTimer);
       setUploadProgress(100);
       setUploadState('success');
 
+      const isBackgroundProcessing = response.data.status === 'processing';
       const summary = {
         filename: file.name,
         size: formatFileSize(file.size),
-        chunks: response.data.indexed_chunks || 481,
-        pages: response.data.total_pages || 348
+        chunks: response.data.chunks || (isBackgroundProcessing ? 'Processing...' : 0),
+        pages: response.data.pages || (isBackgroundProcessing ? 'Processing...' : 0),
+        status: response.data.status || 'ready'
       };
       setUploadSummary(summary);
 
@@ -121,11 +134,18 @@ function UploadPdfModal({ isOpen, onClose, onUploadSuccess, uploadedPdfs = [] })
         onUploadSuccess(summary);
       }
     } catch (error) {
+      if (axios.isCancel(error) || error.name === 'CanceledError' || error.name === 'AbortError') {
+        console.log("PDF upload cancelled by user.");
+        handleReset();
+        return;
+      }
       console.error("PDF upload error:", error);
       setUploadState('error');
       setErrorMessage(
         error.response?.data?.detail || "Failed to process and index PDF. Please check server logs."
       );
+    } finally {
+      uploadAbortRef.current = null;
     }
   };
 
@@ -337,6 +357,16 @@ function UploadPdfModal({ isOpen, onClose, onUploadSuccess, uploadedPdfs = [] })
                           transition={{ duration: 0.3, ease: "easeOut" }}
                         />
                       </div>
+                    </div>
+
+                    <div className="flex justify-end pt-2">
+                      <button
+                        type="button"
+                        onClick={handleCancelUpload}
+                        className="text-xs text-red-500 hover:text-red-600 font-semibold cursor-pointer underline"
+                      >
+                        Cancel Upload
+                      </button>
                     </div>
                   </div>
                 )}

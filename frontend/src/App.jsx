@@ -53,13 +53,15 @@ export default function App() {
   }, [API_BASE_URL]);
 
   // ----------------------------------------------------------------------------
-  // 2. FETCH MESSAGES FOR ACTIVE CHAT
+  // 2. FETCH MESSAGES FOR ACTIVE CHAT (ONLY LATEST Q&A)
   // ----------------------------------------------------------------------------
   const fetchActiveMessages = useCallback(async (chatId) => {
     if (!chatId) return;
     try {
       const res = await axios.get(`${API_BASE_URL}/api/chats/${chatId}`);
-      setActiveMessages(res.data.messages || []);
+      const allMsgs = res.data.messages || [];
+      // Keep only the latest question and answer on the chat screen
+      setActiveMessages(allMsgs.slice(-2));
     } catch (err) {
       console.error(`Failed to fetch messages for chat ${chatId}:`, err);
     }
@@ -82,9 +84,11 @@ export default function App() {
     fetchPdfs();
   }, [fetchChats, fetchPdfs]);
 
-  useEffect(() => {
-    if (activeChatId) {
-      fetchActiveMessages(activeChatId);
+  const handleSelectChat = useCallback((id) => {
+    if (id === activeChatId) return;
+    setActiveChatId(id);
+    if (id) {
+      fetchActiveMessages(id);
     } else {
       setActiveMessages([]);
     }
@@ -138,14 +142,19 @@ export default function App() {
   }, [API_BASE_URL, showToast]);
 
   const handlePdfUploaded = useCallback((data) => {
+    if (!data) return;
     fetchPdfs();
-    showToast(`PDF "${data.filename}" indexed into vector DB!`, 'success');
+    const safeFilename = data.filename || 'PDF Document';
+    const safePages = data.pages !== undefined ? data.pages : 'Processing';
+    const safeChunks = data.chunks !== undefined ? data.chunks : 'Processing';
+    
+    showToast(`PDF "${safeFilename}" uploaded successfully!`, 'success');
     
     if (activeChatId) {
       const notice = {
         id: `sys-${Date.now()}`,
         sender: 'bot',
-        text: `### 📄 Document Indexed Successfully\n\n**${data.filename}** (${data.pages} pages, ${data.chunks} chunks) is now ready in the vector database. Ask any questions about this document!`
+        text: `### 📄 Document Uploaded\n\n**${safeFilename}** (${safePages} pages, ${safeChunks} chunks) is registered in the knowledge index. Ask any questions about this document!`
       };
       setActiveMessages(prev => [...prev, notice]);
     }
@@ -162,70 +171,87 @@ export default function App() {
     }
   }, [API_BASE_URL, fetchPdfs, showToast]);
 
+  const abortControllerRef = useRef(null);
+
+  // Poll for PDF status if any PDF is currently processing
+  useEffect(() => {
+    const hasProcessingPdf = Array.isArray(uploadedPdfs) && uploadedPdfs.some(pdf => pdf && pdf.status === 'processing');
+    if (hasProcessingPdf) {
+      const interval = setInterval(() => {
+        fetchPdfs();
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [uploadedPdfs, fetchPdfs]);
+
+  const handleStopGeneration = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
+    showToast("AI response generation stopped.", "info");
+  }, [showToast]);
+
   // ----------------------------------------------------------------------------
-  // SEND MESSAGE & AI RESPONSE WITH SQLITE PERSISTENCE
+  // SEND MESSAGE & AI RESPONSE WITH SQLITE PERSISTENCE & CANCELLATION
   // ----------------------------------------------------------------------------
   const handleSendMessage = useCallback(async (text) => {
     if (!text || !text.trim() || isLoading) return;
 
-    let targetChatId = activeChatId;
-    if (!targetChatId) {
-      const createRes = await axios.post(`${API_BASE_URL}/api/chats`, { title: text.substring(0, 32) });
-      targetChatId = createRes.data.chat.id;
-      setActiveChatId(targetChatId);
-    }
+    console.log('[FRONTEND] Sending message:', text);
+    console.log('[FRONTEND] API request started');
 
     const userMessage = {
       id: `msg-user-${Date.now()}`,
       sender: 'user',
-      text: text
+      text: text.trim()
     };
 
-    // Show Thinking indicator while waiting for response
     setIsLoading(true);
-    setActiveMessages(prev => [...prev, userMessage]);
+    // Replace previous messages so only the latest question is displayed on screen
+    setActiveMessages([userMessage]);
 
+    let targetChatId = activeChatId;
     const botMessageId = `msg-bot-${Date.now()}`;
     let isFirstToken = true;
     let accumulatedText = "";
-    let animationFrameId = null;
     let isFinished = false;
 
-    const flushToState = () => {
-      if (isFirstToken && accumulatedText.length > 0) {
-        setIsLoading(false);
-        isFirstToken = false;
-        setActiveMessages(prev => [
-          ...prev,
-          {
-            id: botMessageId,
-            sender: 'bot',
-            text: accumulatedText,
-            isStreaming: !isFinished
-          }
-        ]);
-      } else if (!isFirstToken) {
-        setActiveMessages(prev =>
-          prev.map(msg =>
-            msg.id === botMessageId
-              ? { ...msg, text: accumulatedText, isStreaming: !isFinished }
-              : msg
-          )
-        );
-      }
+    const updateBotMessage = (content, finished = false) => {
+      setActiveMessages([
+        userMessage,
+        {
+          id: botMessageId,
+          sender: 'bot',
+          text: content,
+          isStreaming: !finished
+        }
+      ]);
     };
 
+    let streamTimeoutId = null;
     try {
+      abortControllerRef.current = new AbortController();
+      streamTimeoutId = setTimeout(() => {
+        if (abortControllerRef.current) {
+          console.warn("[FRONTEND TIMEOUT] Aborting stream request after 35s timeout.");
+          abortControllerRef.current.abort();
+        }
+      }, 35000);
+
       const response = await fetch(`${API_BASE_URL}/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: text, chat_id: targetChatId })
+        body: JSON.stringify({ question: text.trim(), chat_id: targetChatId }),
+        signal: abortControllerRef.current.signal
       });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
+      console.log('[FRONTEND] Response received');
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
@@ -244,6 +270,7 @@ export default function App() {
             const rawData = trimmed.slice(6);
             try {
               const payload = JSON.parse(rawData);
+              console.log('[FRONTEND] Response parsed:', payload.type);
 
               if (payload.type === 'init') {
                 if (payload.chat_id) {
@@ -251,21 +278,21 @@ export default function App() {
                   setActiveChatId(payload.chat_id);
                 }
               } else if (payload.type === 'token') {
-                accumulatedText += payload.token;
-
                 if (isFirstToken) {
-                  flushToState();
-                } else if (!animationFrameId) {
-                  animationFrameId = requestAnimationFrame(() => {
-                    animationFrameId = null;
-                    flushToState();
-                  });
+                  isFirstToken = false;
+                  setIsLoading(false);
                 }
+                accumulatedText += payload.token;
+                updateBotMessage(accumulatedText, false);
+                console.log('[FRONTEND] AI message updated');
               } else if (payload.type === 'done') {
                 isFinished = true;
                 if (payload.full_text) accumulatedText = payload.full_text;
-                flushToState();
+                if (!accumulatedText) accumulatedText = "I couldn't find this information in the uploaded documents.";
+                updateBotMessage(accumulatedText, true);
                 fetchChats();
+              } else if (payload.type === 'error') {
+                throw new Error(payload.error || "AI Stream Error");
               }
             } catch (e) {
               console.error("Error parsing stream chunk:", e);
@@ -275,19 +302,36 @@ export default function App() {
       }
 
       isFinished = true;
-      if (accumulatedText) flushToState();
+      if (!accumulatedText) accumulatedText = "I couldn't find this information in the uploaded documents.";
+      updateBotMessage(accumulatedText, true);
       fetchChats();
+      console.log('[FRONTEND] Loading stopped');
     } catch (error) {
-      console.error("Streaming Backend Error:", error);
+      if (error.name === 'AbortError') {
+        console.log("Stream generation stopped by user or timeout.");
+        if (!accumulatedText) {
+          const stoppedMessage = {
+            id: `msg-stop-${Date.now()}`,
+            sender: 'bot',
+            text: `### ⏱️ Generation Timed Out / Stopped\n\nAI generation was stopped or exceeded time limits. Please try again.`
+          };
+          setActiveMessages([userMessage, stoppedMessage]);
+        }
+        return;
+      }
+      console.error("[FRONTEND] Streaming Backend Error:", error);
       setIsLoading(false);
       const errorMessage = {
         id: `msg-err-${Date.now()}`,
         sender: 'bot',
-        text: `### ⚠️ Connection Error\n\nCould not connect to FastAPI backend at \`${API_BASE_URL}/chat/stream\`. Please make sure Uvicorn backend is running.`
+        text: `### ⚠️ Connection Error\n\nCould not connect to AI Assistant. ${error.message || 'Please check backend server.'}`
       };
-      setActiveMessages(prev => [...prev, errorMessage]);
+      setActiveMessages([userMessage, errorMessage]);
     } finally {
+      if (streamTimeoutId) clearTimeout(streamTimeoutId);
       setIsLoading(false);
+      abortControllerRef.current = null;
+      console.log('[FRONTEND] Loading stopped (finally)');
     }
   }, [isLoading, activeChatId, API_BASE_URL, fetchChats]);
 
@@ -298,12 +342,6 @@ export default function App() {
       handleSendMessage(lastUserMsg.text);
     }
   }, [activeMessages, isLoading, handleSendMessage]);
-
-  const handleSelectChat = useCallback((id) => {
-    if (id === activeChatId) return;
-    setActiveMessages([]);
-    setActiveChatId(id);
-  }, [activeChatId]);
 
   const handleOpenSettings = useCallback(() => setIsSettingsModalOpen(true), []);
   const handleCloseSettings = useCallback(() => setIsSettingsModalOpen(false), []);
@@ -416,6 +454,7 @@ export default function App() {
               onSendMessage={handleSendMessage}
               isLoading={isLoading}
               onOpenUploadModal={handleOpenUpload}
+              onStopGeneration={handleStopGeneration}
             />
           )}
         </motion.div>

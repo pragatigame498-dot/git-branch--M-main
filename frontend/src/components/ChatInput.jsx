@@ -1,13 +1,8 @@
 import React, { useState, useRef, memo } from 'react';
 import { motion } from 'framer-motion';
-import { Send, Paperclip, Loader2, Sparkles, CornerDownLeft } from 'lucide-react';
+import { Send, Paperclip, Loader2, Sparkles, CornerDownLeft, Square } from 'lucide-react';
 
-// ==============================================================================
-// 2026 NEXT-GEN AI CHAT INPUT (Linear.app / v0 / Claude 3.5 Inspired)
-// Features floating border glow, active text pulse, & shortcut indicators.
-// ==============================================================================
-
-function ChatInput({ onSendMessage, isLoading, onOpenUploadModal }) {
+function ChatInput({ onSendMessage, isLoading, onOpenUploadModal, onStopGeneration }) {
   const [text, setText] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef(null);
@@ -85,40 +80,54 @@ function ChatInput({ onSendMessage, isLoading, onOpenUploadModal }) {
             onKeyDown={handleKeyDown}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            placeholder="Ask anything about your PDF document..."
-            className="flex-1 bg-transparent border-none outline-none text-[#1C1C1E] dark:text-white placeholder-slate-400 text-xs sm:text-sm px-3 py-1.5 resize-none max-h-30 leading-relaxed font-medium transition-colors"
+            placeholder={isLoading ? "AI is generating answer..." : "Ask anything about your PDF document..."}
+            disabled={isLoading}
+            className="flex-1 bg-transparent border-none outline-none text-[#1C1C1E] dark:text-white placeholder-slate-400 text-xs sm:text-sm px-3 py-1.5 resize-none max-h-30 leading-relaxed font-medium transition-colors disabled:opacity-60"
           />
 
           {/* Linear-Style Shortcut Pill (Visible when text present on Desktop) */}
-          {hasContent && (
+          {hasContent && !isLoading && (
             <span className="hidden md:flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-md mr-2 shrink-0">
               <span>Enter</span>
               <CornerDownLeft className="w-3 h-3" />
             </span>
           )}
 
-          {/* Submit Button */}
-          <motion.button
-            whileHover={hasContent && !isLoading ? { scale: 1.08 } : {}}
-            whileTap={hasContent && !isLoading ? { scale: 0.92 } : {}}
-            animate={hasContent && !isLoading ? { scale: [1, 1.05, 1] } : {}}
-            transition={hasContent && !isLoading ? { repeat: Infinity, duration: 2, ease: "easeInOut" } : {}}
-            type="submit"
-            disabled={!hasContent || isLoading}
-            className={`
-              w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all duration-300 cursor-pointer shadow-md
-              ${hasContent && !isLoading
-                ? 'bg-gradient-to-r from-[#8E72FF] to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white shadow-purple-500/30' 
-                : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed shadow-none'
-              }
-            `}
-          >
-            {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Send className="w-4 h-4 ml-0.5" />
-            )}
-          </motion.button>
+          {/* Submit / Stop Button */}
+          {isLoading && onStopGeneration ? (
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              type="button"
+              onClick={onStopGeneration}
+              title="Stop AI Generation"
+              className="w-9 h-9 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-red-500/30 cursor-pointer"
+            >
+              <Square className="w-4 h-4 fill-white" />
+            </motion.button>
+          ) : (
+            <motion.button
+              whileHover={hasContent && !isLoading ? { scale: 1.08 } : {}}
+              whileTap={hasContent && !isLoading ? { scale: 0.92 } : {}}
+              animate={hasContent && !isLoading ? { scale: [1, 1.05, 1] } : {}}
+              transition={hasContent && !isLoading ? { repeat: Infinity, duration: 2, ease: "easeInOut" } : {}}
+              type="submit"
+              disabled={!hasContent || isLoading}
+              className={`
+                w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all duration-300 cursor-pointer shadow-md
+                ${hasContent && !isLoading
+                  ? 'bg-gradient-to-r from-[#8E72FF] to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white shadow-purple-500/30' 
+                  : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed shadow-none'
+                }
+              `}
+            >
+              {isLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4 ml-0.5" />
+              )}
+            </motion.button>
+          )}
 
         </motion.div>
       </form>

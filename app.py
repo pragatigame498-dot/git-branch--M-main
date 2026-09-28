@@ -3,11 +3,13 @@ import glob
 import asyncio
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_community.document_loaders import PyPDFLoader
+
+import config
 
 import database
 import memory
@@ -29,14 +31,11 @@ from create_db import (
 async def lifespan(app: FastAPI):
     """
     FastAPI Startup Lifespan.
-    Initializes SQLite Database, pre-loads vector store & embedding models once.
+    Initializes SQLite Database & ready state instantly.
     """
     print("[STARTUP] Booting RAG AI Assistant Backend...")
     database.init_db()
-    await asyncio.to_thread(get_global_embeddings)
-    await asyncio.to_thread(get_global_vector_db)
-    await asyncio.to_thread(build_vector_db)
-    print("[STARTUP] Vector DB, SQLite History & Memory System Ready!")
+    print("[STARTUP] Database Initialized & Server Listening!")
     yield
     print("[SHUTDOWN] Application shutting down.")
 
@@ -66,10 +65,21 @@ class DeletePdfRequest(BaseModel):
 @app.get("/health")
 @app.get("/")
 async def health_check():
+    vector_status = "connected"
+    try:
+        get_global_vector_db()
+    except Exception:
+        vector_status = "error"
+
     return {
         "status": "healthy",
         "service": "RAG AI Assistant API",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "vector_db": vector_status,
+        "llm": "available",
+        "max_pdf_size_mb": config.MAX_PDF_SIZE_MB,
+        "max_pdf_pages": config.MAX_PDF_PAGES,
+        "top_k": config.TOP_K
     }
 
 # ==============================================================================
@@ -145,19 +155,26 @@ async def chat(data: ChatRequest):
         title = data.question[:24] + "..." if len(data.question) > 24 else data.question
         await asyncio.to_thread(database.create_chat, chat_id, title, "default_user")
 
+    print(f"[CHAT] Request started for chat {chat_id}")
     # 1. Save user message to SQLite DB
     await asyncio.to_thread(database.add_message, chat_id, "user", data.question)
 
     # 2. Execute RAG + Memory query in background worker thread
-    answer = await asyncio.to_thread(ask_rag, data.question, "default_user", chat_id)
-    
+    res_dict = await asyncio.to_thread(ask_rag, data.question, "default_user", chat_id)
+    answer = res_dict.get("answer", "") if isinstance(res_dict, dict) else str(res_dict)
+    sources = res_dict.get("sources", []) if isinstance(res_dict, dict) else []
+    perf = res_dict.get("perf", {}) if isinstance(res_dict, dict) else {}
+
     # 3. Save AI bot message to SQLite DB
     bot_msg = await asyncio.to_thread(database.add_message, chat_id, "bot", answer)
 
     return {
+        "success": True,
         "chat_id": chat_id,
         "question": data.question,
         "answer": answer,
+        "sources": sources,
+        "perf": perf,
         "bot_message_id": bot_msg["id"]
     }
 
@@ -177,6 +194,7 @@ async def chat_stream(data: ChatRequest, request: Request):
         title = data.question[:32] + "..." if len(data.question) > 32 else data.question
         await asyncio.to_thread(database.create_chat, chat_id, title, "default_user")
 
+    print(f"[CHAT STREAM] Request received for chat {chat_id}: {data.question[:60]}")
     # Save user message to SQLite DB
     await asyncio.to_thread(database.add_message, chat_id, "user", data.question)
 
@@ -222,11 +240,11 @@ async def chat_stream(data: ChatRequest, request: Request):
 @app.get("/pdfs")
 async def list_pdfs():
     """
-    Instant PDF Listing from Metadata Cache.
+    Instant PDF Listing from Metadata Cache with Real-Time Status.
     """
-    os.makedirs("data", exist_ok=True)
+    os.makedirs(config.DATA_DIR, exist_ok=True)
     metadata_store = await asyncio.to_thread(load_pdf_index_metadata)
-    pdf_paths = glob.glob("data/*.pdf")
+    pdf_paths = glob.glob(os.path.join(config.DATA_DIR, "*.pdf"))
     
     results = []
     metadata_updated = False
@@ -239,23 +257,17 @@ async def list_pdfs():
                 "filename": filename,
                 "size": info.get("size", os.path.getsize(path)),
                 "pages": info.get("pages", 1),
-                "status": "ready"
+                "chunks": info.get("chunks", 0),
+                "status": info.get("status", "ready"),
+                "error": info.get("error", None)
             })
         else:
             size_bytes = os.path.getsize(path)
-            pages = 1
-            try:
-                loader = PyPDFLoader(path)
-                docs = await asyncio.to_thread(loader.load)
-                pages = len(docs)
-            except Exception:
-                pass
-
             file_info = {
                 "filename": filename,
                 "hash": "",
                 "size": size_bytes,
-                "pages": pages,
+                "pages": 1,
                 "chunks": 0,
                 "status": "ready"
             }
@@ -264,7 +276,8 @@ async def list_pdfs():
             results.append({
                 "filename": filename,
                 "size": size_bytes,
-                "pages": pages,
+                "pages": 1,
+                "chunks": 0,
                 "status": "ready"
             })
 
@@ -273,31 +286,76 @@ async def list_pdfs():
 
     return {"pdfs": results}
 
+def _background_pdf_indexing_task(file_path: str, filename: str):
+    """Background task for async PDF indexing & cache clearing."""
+    try:
+        print(f"[BACKGROUND TASK] Starting PDF indexing for {filename}...")
+        result = index_single_pdf(file_path)
+        clear_rag_cache()
+        print(f"[BACKGROUND TASK] Completed PDF indexing for {filename}: Status {result.get('status')}")
+    except Exception as e:
+        print(f"[BACKGROUND TASK ERROR] Failed to index {filename}: {e}")
+
 @app.post("/upload")
-async def upload_pdf(file: UploadFile = File(...)):
+async def upload_pdf(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     """
-    Incremental PDF Upload Endpoint.
+    Non-blocking Asynchronous PDF Upload & Indexing Endpoint.
     """
     if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed.")
+        raise HTTPException(status_code=400, detail="Only PDF document files (.pdf) are allowed.")
     
-    os.makedirs("data", exist_ok=True)
-    file_path = os.path.join("data", file.filename)
+    os.makedirs(config.DATA_DIR, exist_ok=True)
+    file_path = os.path.join(config.DATA_DIR, file.filename)
     
     content = await file.read()
+    file_size = len(content)
+
+    # 1. File Size Protection
+    max_bytes = config.MAX_PDF_SIZE_MB * 1024 * 1024
+    if file_size > max_bytes:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"PDF size ({round(file_size/(1024*1024), 2)}MB) exceeds limit of {config.MAX_PDF_SIZE_MB}MB."
+        )
+
     with open(file_path, "wb") as f:
         f.write(content)
-        
-    result = await asyncio.to_thread(index_single_pdf, file_path)
-    clear_rag_cache()
-    
-    return {
-        "message": "File uploaded and incrementally indexed successfully",
-        "filename": file.filename,
-        "pages": result.get("pages", 1),
-        "chunks": result.get("chunks", 0),
-        "status": "ready"
-    }
+
+    # Fast Sync Indexing for small files / Instant Background dispatch for larger files
+    if file_size < 2 * 1024 * 1024:  # Under 2MB: instant sync indexing
+        result = await asyncio.to_thread(index_single_pdf, file_path)
+        clear_rag_cache()
+        if result.get("status") == "failed":
+            raise HTTPException(status_code=400, detail=result.get("error", "PDF processing failed."))
+
+        return {
+            "message": "File uploaded and indexed successfully",
+            "filename": file.filename,
+            "pages": result.get("pages", 1),
+            "chunks": result.get("chunks", 0),
+            "status": "ready"
+        }
+    else:
+        # Background task for non-blocking UI experience
+        metadata_store = await asyncio.to_thread(load_pdf_index_metadata)
+        metadata_store[file.filename] = {
+            "filename": file.filename,
+            "size": file_size,
+            "pages": 0,
+            "chunks": 0,
+            "status": "processing"
+        }
+        await asyncio.to_thread(save_pdf_index_metadata, metadata_store)
+
+        background_tasks.add_task(_background_pdf_indexing_task, file_path, file.filename)
+
+        return {
+            "message": "File upload accepted. Processing PDF in background...",
+            "filename": file.filename,
+            "pages": 0,
+            "chunks": 0,
+            "status": "processing"
+        }
 
 @app.post("/delete_pdf")
 async def delete_pdf(data: DeletePdfRequest):
